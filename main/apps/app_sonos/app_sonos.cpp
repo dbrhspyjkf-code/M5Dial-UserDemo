@@ -124,7 +124,7 @@ void AppSonos::_handle_touch()
         WIFI_CONNECT::disconnect();
         onCreate();
     }
-    else if (_data.state == State::POLLING && y >= 129 && y <= 161)
+    else if (_data.state == State::POLLING && y >= 154 && y <= 186)
     {
         if (x >= 30 && x <= 80)
         {

@@ -43,16 +43,19 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
     _canvas->setTextSize(1);
     _canvas->drawCenterString("SONOS", 120, 40);
 
-    /* Title, truncated with "..." if it doesn't fit in ~200px */
-    _canvas->setTextSize(2);
+    /* Title, smaller font, truncated with "..." if it doesn't fit in ~200px */
+    _canvas->setTextSize(1);
     std::string display_title = title.empty() ? "(nothing playing)" : title;
     while (_canvas->textWidth(display_title.c_str()) > 200 && display_title.size() > 3)
     {
         display_title = display_title.substr(0, display_title.size() - 4) + "...";
     }
-    _canvas->drawCenterString(display_title.c_str(), 120, 62);
+    _canvas->drawCenterString(display_title.c_str(), 120, 85);
 
-    /* Artist, dimmer, smaller */
+    /* Artist, dimmer, smaller font (GUI_FONT_CN_SMALL instead of the default
+       GUI_FONT_CN_BIG — still CJK-capable, unlike LovyanGFX's tiny ASCII-only
+       Font0), below the title with more clearance */
+    _canvas->setFont(GUI_FONT_CN_SMALL);
     _canvas->setTextColor(0x999999U);
     _canvas->setTextSize(1);
     std::string display_artist = artist;
@@ -60,13 +63,8 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
     {
         display_artist = display_artist.substr(0, display_artist.size() - 4) + "...";
     }
-    _canvas->drawCenterString(display_artist.c_str(), 120, 88);
-
-    /* Volume readout */
-    char vol_buf[16];
-    snprintf(vol_buf, sizeof(vol_buf), "VOL %d%%", volumePercent);
-    _canvas->setTextColor(TFT_WHITE);
-    _canvas->drawCenterString(vol_buf, 120, 108);
+    _canvas->drawCenterString(display_artist.c_str(), 120, 122);
+    _canvas->setFont(GUI_FONT_CN_BIG);
 
     /* Prev / Play-Pause / Next buttons */
     struct BtnSpec { int x; const char* label; };
@@ -76,7 +74,7 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
         {185, ">>"},
     };
 
-    int btn_y = 145;
+    int btn_y = 170;
     int btn_height = 32;
 
     for (int i = 0; i < 3; i++)
@@ -92,6 +90,13 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
         _canvas->setTextColor(TFT_BLACK);
         _canvas->drawCenterString(buttons[i].label, buttons[i].x, btn_y - text_h / 2);
     }
+
+    /* Volume readout, below the buttons */
+    char vol_buf[16];
+    snprintf(vol_buf, sizeof(vol_buf), "VOL %d%%", volumePercent);
+    _canvas->setTextColor(TFT_WHITE);
+    _canvas->setTextSize(1);
+    _canvas->drawCenterString(vol_buf, 120, 198);
 
     _draw_quit_button();
     _canvas->pushSprite(0, 0);
