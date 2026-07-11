@@ -26,7 +26,7 @@
 #define ICON_TAG_UP_OFFSET          -24
 #define ICON_TAG_DOWN_OFFSET        0
 
-#define ICON_NUM                    8
+#define ICON_NUM                    9
 
 
 /* Strucut to hold icon value */
@@ -51,7 +51,8 @@ static std::array<uint32_t, ICON_NUM> icon_color_list = {
     0xEB8429,
     0x04A279,
     0x008CD6,
-    0x5D7BA2
+    0x5D7BA2,
+    0xB565F3
     // 0x000000
 };
 /* Icon tag */
@@ -63,7 +64,8 @@ static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
     "WIFI", "SCAN",
     "BLE", "SERVER",
     "TEMP CTRL", "DEMO",
-    "MORE", ""
+    "MORE", "",
+    "TIMER", "SET"
 };
 /* Icon pic */
 static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
@@ -74,7 +76,8 @@ static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
     image_data_icon_wifi,
     image_data_icon_ble,
     image_data_icon_temp,
-    image_data_icon_more
+    image_data_icon_more,
+    image_data_icon_timer
 };
 /* Sprite to render icon with transparency */
 static LGFX_Sprite icon_sprite_list[ICON_NUM];

@@ -296,6 +296,9 @@ void Launcher::_app_open_callback(uint8_t selectedNum)
         case 7:
             app_ptr = new MOONCAKE::USER_APP::MoreMenu;
             break;
+        case 8:
+            app_ptr = new MOONCAKE::USER_APP::AppTimer;
+            break;
         default:
             break;
     };
