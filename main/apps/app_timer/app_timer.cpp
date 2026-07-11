@@ -77,16 +77,27 @@ void AppTimer::_handle_touch()
     int x = _data.hal->tp.getTouchPointBuffer().x;
     int y = _data.hal->tp.getTouchPointBuffer().y;
 
+    /* Hit-test zones mirror the geometry computed in GUI_Timer::renderPage:
+       digit row centered at y=115 (measured font height at size 3), pill
+       button a fixed gap below it. Recomputed here (not read back from the
+       GUI) since AppTimer already has direct canvas access, same as every
+       other app's touch handling in this codebase. */
+    _data.hal->canvas->setTextSize(3);
+    int digit_h = _data.hal->canvas->fontHeight();
+    int digit_top_y = 115 - digit_h / 2;
+    int pill_height = 28;
+    int pill_y = digit_top_y + digit_h + 24 + pill_height / 2;
+
     /* Digit row tap: select field (only while editable) */
     if ((_data.state == State::EDIT || _data.state == State::PAUSED) &&
-        y >= 75 && y <= 115)
+        y >= digit_top_y - 10 && y <= digit_top_y + digit_h + 10)
     {
         _data.selected_field = (x < 120) ? Field::MINUTES : Field::SECONDS;
         _render();
     }
 
-    /* Pill button tap */
-    if (x >= 70 && x <= 170 && y >= 175 && y <= 205)
+    /* Pill button tap (generous fixed x zone; pill width varies with label text) */
+    if (x >= 40 && x <= 200 && y >= pill_y - pill_height / 2 - 8 && y <= pill_y + pill_height / 2 + 8)
     {
         switch (_data.state)
         {
@@ -209,4 +220,9 @@ void AppTimer::onRunning()
 void AppTimer::onDestroy()
 {
     _log("onDestroy");
+
+    /* Shared canvas: leave text size back at the default so the launcher's
+       tag rendering (which never sets its own textSize) isn't left using
+       whatever size this app last drew with. */
+    _data.hal->canvas->setTextSize(1);
 }

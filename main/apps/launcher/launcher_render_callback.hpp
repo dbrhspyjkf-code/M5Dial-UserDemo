@@ -146,6 +146,11 @@ struct LauncherRender_CB_t : public SMOOTH_MENU::SimpleMenuCallback_t
             {
                 _canvas->setFont(GUI_FONT_CN_BIG);
                 _canvas->setTextColor(ICON_TAG_COLOR);
+                /* Apps don't all reset textSize before returning to the
+                   launcher (it's the same shared canvas) — pin it here so
+                   whatever the last app left behind can't blow up the tag
+                   text size. */
+                _canvas->setTextSize(1);
 
                 /* Darw tag with offset */
                 _canvas->drawCenterString(
@@ -159,8 +164,9 @@ struct LauncherRender_CB_t : public SMOOTH_MENU::SimpleMenuCallback_t
                     icon_tag_y + ICON_TAG_DOWN_OFFSET
                 );
             }
-            else 
+            else
             {
+                _canvas->setTextSize(1);
                 _canvas->drawCenterString(
                     "-. -",
                     icon_tag_x,
