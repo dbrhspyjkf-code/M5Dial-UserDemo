@@ -299,6 +299,9 @@ void Launcher::_app_open_callback(uint8_t selectedNum)
         case 8:
             app_ptr = new MOONCAKE::USER_APP::AppTimer;
             break;
+        case 9:
+            app_ptr = new MOONCAKE::USER_APP::AppSonos;
+            break;
         default:
             break;
     };
