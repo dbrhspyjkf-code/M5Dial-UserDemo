@@ -68,9 +68,6 @@ struct Data_t {
     uint32_t last_tick_ms = 0;   // for the 1s countdown tick
     uint32_t last_blink_ms = 0;  // for DONE-state blink
     bool blink_on = true;
-
-    int delta_time = 0;               // encoder acceleration, mirrors Set_Brightness
-    uint32_t scroll_speed_time_count = 0;
 };
 ```
 
@@ -86,7 +83,7 @@ struct Data_t {
 
 **States:**
 
-1. **EDIT** (default / after reset): tap left half of digits → `selected_field = MINUTES`; tap right half → `SECONDS`. Encoder rotate adjusts the selected field (seconds wraps 0–59, minutes clamps 0–99, using the same delta-time-based acceleration curve already in `Set_Brightness::onRunning`). Tap pill (`START`) → compute `remaining_seconds = set_minutes*60 + set_seconds`; if `> 0`, go to **RUNNING**.
+1. **EDIT** (default / after reset): tap left half of digits → `selected_field = MINUTES`; tap right half → `SECONDS`. Encoder rotate adjusts the selected field by ±1 per detent (seconds wraps 0–59, minutes clamps 0–99, no acceleration — matches the reference's flat ±1-per-pulse behavior, simpler than `Set_Brightness`'s acceleration curve and unnecessary for a 0–99 range). Tap pill (`START`) → compute `remaining_seconds = set_minutes*60 + set_seconds`; if `> 0`, go to **RUNNING**.
 2. **RUNNING**: every 1000ms (checked via `millis() - last_tick_ms`, no RTOS timer needed), `remaining_seconds -= 1`; at 0 → go to **DONE** (fire buzzer once). Tap pill (`PAUSE`) → **PAUSED**. Digits are read-only in this state (no field highlight, taps on digits ignored).
 3. **PAUSED**: on entry, decompose `remaining_seconds` into `set_minutes = remaining_seconds/60`, `set_seconds = remaining_seconds%60` so the same MM/SS fields used in EDIT become editable. Same digit-tap-to-select + encoder-adjust as EDIT, operating on `set_minutes`/`set_seconds`. Tap pill (`RESUME`) → recompute `remaining_seconds = set_minutes*60 + set_seconds`, go to **RUNNING** (resets `last_tick_ms` so the next second isn't short).
 4. **DONE**: `hal.buzz.tone(...)` fires once on entry. Digits blink (toggle visibility/dim every ~500ms via `last_blink_ms`) until acknowledged. Tap pill (`RESET`) → restore `set_minutes`/`set_seconds` (the values from before the countdown started), go to **EDIT**.
