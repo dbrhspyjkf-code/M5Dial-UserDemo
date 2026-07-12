@@ -18,7 +18,7 @@ void GUI_Sonos::renderStatus(const std::string& line1, const std::string& line2)
 
     _canvas->setTextColor(TFT_WHITE);
     _canvas->setTextSize(1);
-    _canvas->drawCenterString("SONOS", 120, 45);
+    _canvas->drawCenterString("SONOS", 120, 55);
 
     _canvas->setTextSize(2);
     int h1 = _canvas->fontHeight();
@@ -41,7 +41,7 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
 
     _canvas->setTextColor(TFT_WHITE);
     _canvas->setTextSize(1);
-    _canvas->drawCenterString("SONOS", 120, 40);
+    _canvas->drawCenterString("SONOS", 120, 50);
 
     /* Title, smaller font, truncated with "..." if it doesn't fit in ~200px */
     _canvas->setTextSize(1);
@@ -52,11 +52,11 @@ void GUI_Sonos::renderPlaying(const std::string& title, const std::string& artis
     }
     _canvas->drawCenterString(display_title.c_str(), 120, 85);
 
-    /* Artist, dimmer, smaller font (GUI_FONT_CN_SMALL instead of the default
+    /* Artist, smaller font (GUI_FONT_CN_SMALL instead of the default
        GUI_FONT_CN_BIG — still CJK-capable, unlike LovyanGFX's tiny ASCII-only
        Font0), below the title with more clearance */
     _canvas->setFont(GUI_FONT_CN_SMALL);
-    _canvas->setTextColor(0x999999U);
+    _canvas->setTextColor(TFT_WHITE);
     _canvas->setTextSize(1);
     std::string display_artist = artist;
     while (_canvas->textWidth(display_artist.c_str()) > 200 && display_artist.size() > 3)
