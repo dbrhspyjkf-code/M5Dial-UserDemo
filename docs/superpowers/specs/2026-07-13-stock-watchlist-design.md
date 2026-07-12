@@ -21,11 +21,10 @@ Only `code`, `name`, `price`, and `chg` (percentage change) are used — `pchg`/
 
 ## STOCK_CLIENT utility
 
-New `main/apps/utilities/stock_client/stock_client.h`/`.cpp`, following the exact persistent-connection + mutex convention established for `HA_CLIENT` (to avoid repeating the per-call connection leak that caused the earlier "unreachable" bug) — but a separate client instance, since this hits a different host:port with no auth header, not Home Assistant.
+New `main/apps/utilities/stock_client/stock_client.h`/`.cpp`. Unlike `HA_CLIENT`, this does **not** use a persistent connection: the actual response body is ~12KB (confirmed via live `curl` — the server includes `analysis_summary`/`one_sentence` text for every stock even though this app doesn't display it), far larger than `HA_CLIENT`'s fixed 2048-byte buffer, and this endpoint is only ever called once per app open (not continuously polled like the 4 HA apps), so the connection-leak problem `HA_CLIENT`'s persistent-connection fix addressed doesn't apply here — a fresh create-per-call client is fine at this call frequency.
 
 - `StockItem{code, name, price, chg}`
-- `std::vector<StockItem> get_portfolio(base_url)` — GET the endpoint, parse the JSON array, return the list (empty list on failure).
-- `void init()` — creates the persistent client + mutex, called once from `main.cpp` alongside `HA_CLIENT::init()`.
+- `std::vector<StockItem> get_portfolio(base_url)` — creates a one-off `esp_http_client`, GETs the endpoint into a `malloc`'d 16KB response buffer (freed right after parsing — too large to safely put on a task's stack, and not worth reserving statically for an app that's rarely open), parses the JSON array, returns the list (empty list on failure). No `init()` needed — nothing to set up ahead of time.
 
 ## App behavior
 
