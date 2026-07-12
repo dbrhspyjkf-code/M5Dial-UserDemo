@@ -385,4 +385,91 @@ namespace HA_CLIENT
 
         return _post_json(base_url, token, "/api/services/number/set_value", body);
     }
+
+
+    FanState get_fan_state(const char* base_url, const char* token, const char* entity_id)
+    {
+        FanState result;
+
+        char url[256];
+        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+
+        ResponseBuffer resp_buf;
+        resp_buf.len = 0;
+        resp_buf.data[0] = '\0';
+
+        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
+        esp_err_t err = esp_http_client_perform(client);
+
+        int status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+
+        if (err != ESP_OK || status != 200)
+        {
+            ESP_LOGE(TAG, "get_fan_state failed: err=%d status=%d", err, status);
+            return result;
+        }
+
+        cJSON* root = cJSON_Parse(resp_buf.data);
+        if (root == nullptr)
+        {
+            ESP_LOGE(TAG, "get_fan_state: JSON parse failed");
+            return result;
+        }
+
+        cJSON* state = cJSON_GetObjectItem(root, "state");
+        if (cJSON_IsString(state))
+        {
+            result.is_on = (strcmp(state->valuestring, "on") == 0);
+        }
+
+        cJSON* attributes = cJSON_GetObjectItem(root, "attributes");
+        if (attributes != nullptr)
+        {
+            cJSON* percentage = cJSON_GetObjectItem(attributes, "percentage");
+            if (cJSON_IsNumber(percentage))
+            {
+                result.percentage = percentage->valueint;
+            }
+
+            cJSON* oscillating = cJSON_GetObjectItem(attributes, "oscillating");
+            if (cJSON_IsBool(oscillating))
+            {
+                result.oscillating = cJSON_IsTrue(oscillating);
+            }
+        }
+
+        cJSON_Delete(root);
+        result.ok = true;
+        return result;
+    }
+
+
+    bool set_fan_power(const char* base_url, const char* token,
+                        const char* entity_id, bool on)
+    {
+        return call_service(base_url, token, "fan", on ? "turn_on" : "turn_off", entity_id);
+    }
+
+
+    bool set_fan_percentage(const char* base_url, const char* token,
+                             const char* entity_id, int percentage)
+    {
+        char body[160];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"percentage\": %d}",
+                 entity_id, percentage);
+
+        return _post_json(base_url, token, "/api/services/fan/set_percentage", body);
+    }
+
+
+    bool set_fan_oscillating(const char* base_url, const char* token,
+                              const char* entity_id, bool oscillating)
+    {
+        char body[160];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"oscillating\": %s}",
+                 entity_id, oscillating ? "true" : "false");
+
+        return _post_json(base_url, token, "/api/services/fan/oscillate", body);
+    }
 }

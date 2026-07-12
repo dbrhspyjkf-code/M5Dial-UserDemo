@@ -103,4 +103,37 @@ namespace HA_CLIENT
      */
     bool set_number_value(const char* base_url, const char* token,
                            const char* entity_id, float value);
+
+    struct FanState
+    {
+        bool ok = false;
+        bool is_on = false;
+        int percentage = 0;      // 0-100
+        bool oscillating = false;
+    };
+
+    /**
+     * @brief GET /api/states/{entity_id} for a fan entity
+     */
+    FanState get_fan_state(const char* base_url, const char* token, const char* entity_id);
+
+    /**
+     * @brief POST /api/services/fan/turn_on or /turn_off (no extra fields)
+     */
+    bool set_fan_power(const char* base_url, const char* token,
+                        const char* entity_id, bool on);
+
+    /**
+     * @brief POST /api/services/fan/set_percentage with
+     * {"entity_id": entity_id, "percentage": percentage}
+     */
+    bool set_fan_percentage(const char* base_url, const char* token,
+                             const char* entity_id, int percentage);
+
+    /**
+     * @brief POST /api/services/fan/oscillate with
+     * {"entity_id": entity_id, "oscillating": true/false}
+     */
+    bool set_fan_oscillating(const char* base_url, const char* token,
+                              const char* entity_id, bool oscillating);
 }
