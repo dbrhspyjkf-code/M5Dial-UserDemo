@@ -1,18 +1,17 @@
 /**
  * @file app_more_menu.h
- * @author Forairaaaaa
- * @brief 
- * @version 0.1
- * @date 2023-08-07
- * 
- * @copyright Copyright (c) 2023
- * 
+ * @brief Read-only viewer for the user's stock watchlist, fetched
+ * once per app open from the hermes-mcp-xiaozhi stock API. Encoder
+ * rotates through the list (wraps around). No writes to any server -
+ * this app is display-only.
  */
 #pragma once
 #include "../app.h"
 #include "../../hal/hal.h"
-#include "../utilities/smooth_menu/src/simple_menu/simple_menu.h"
-#include "more_menu_render_callback.hpp"
+#include "gui/gui_more_menu.h"
+#include "stock_config.h"
+#include "../utilities/stock_client/stock_client.h"
+#include <vector>
 
 
 namespace MOONCAKE
@@ -21,43 +20,40 @@ namespace MOONCAKE
     {
         namespace MORE_MENU
         {
+            enum class State { CONNECTING, CONTROLLING, ERROR };
+
             struct Data_t
             {
                 HAL::HAL* hal = nullptr;
-                SMOOTH_MENU::Simple_Menu* menu;
-                MoreMenuRender_CB_t* menu_render_cb;
+
+                State state = State::CONNECTING;
+                std::string error_message;
+
+                std::vector<STOCK_CLIENT::StockItem> stocks;
+                int current_index = 0;
             };
-        }
+        } // namespace MORE_MENU
 
         class MoreMenu : public APP_BASE
         {
             private:
-                const char* _tag = "MoreMenu";
-                void _create_menu();
-                void _menu_loop();
+                const char* _tag = "stock";
 
-
-                /* Selected callback */
-                void _item_selected_callback(uint8_t selectedNum);
-                void _callback_lvgl(const std::string& selectedTag);
-
+                void _handle_encoder();
+                void _handle_touch();
+                void _render();
+                void _fetch();
 
             public:
                 MORE_MENU::Data_t _data;
+                GUI_MoreMenu _gui;
 
+                GUI_Base* getGui() override { return &_gui; }
 
-                /**
-                 * @brief Lifecycle callbacks for derived to override
-                 * 
-                 */
-                /* Setup App configs, called when App "install()" */
                 void onSetup();
-
-                /* Life cycle */
                 void onCreate();
                 void onRunning();
                 void onDestroy();
         };
     }
 }
-
