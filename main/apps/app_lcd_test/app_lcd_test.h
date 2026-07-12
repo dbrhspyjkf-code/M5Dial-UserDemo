@@ -1,17 +1,17 @@
 /**
  * @file app_lcd_test.h
- * @author Forairaaaaa
- * @brief 
- * @version 0.1
- * @date 2023-07-27
- * 
- * @copyright Copyright (c) 2023
- * 
+ * @brief Controls a TV's power and volume through Home Assistant's REST
+ * API. Power is inverted through a "sound bar mode" switch (ON = TV
+ * off) - this file is the only place that inversion is visible; the
+ * GUI and touch handling only ever deal with the TV's actual on/off
+ * state. Touch: on/off toggle. Encoder: debounced volume. Encoder
+ * button: quit (project-wide convention).
  */
 #pragma once
 #include "../app.h"
 #include "../../hal/hal.h"
 #include "gui/gui_lcd_test.h"
+#include "tv_config.h"
 
 
 namespace MOONCAKE
@@ -20,9 +20,22 @@ namespace MOONCAKE
     {
         namespace LCD_TEST
         {
+            enum class State { CONNECTING, CONTROLLING, ERROR };
+
             struct Data_t
             {
                 HAL::HAL* hal = nullptr;
+
+                State state = State::CONNECTING;
+                std::string error_message;
+
+                bool tv_on = true;
+                float volume = 50.0f;
+                float volume_min = 0.0f;
+                float volume_max = 100.0f;
+
+                bool volume_dirty = false;
+                uint32_t last_volume_change_ms = 0;
             };
         }
 
@@ -31,28 +44,19 @@ namespace MOONCAKE
             private:
                 const char* _tag = "lcd";
 
-                LCD_TEST::Data_t _data;
-                GUI_LCD_TEST _gui;
-                
+                void _handle_encoder();
+                void _handle_touch();
+                void _handle_volume_debounce();
+                void _render();
+                void _refresh_state();
 
             public:
-                
-                /**
-                 * @brief Get gui pointer for basic settings 
-                 * 
-                 * @return GUI_Base* 
-                 */
+                LCD_TEST::Data_t _data;
+                GUI_LCD_TEST _gui;
+
                 GUI_Base* getGui() override { return &_gui; }
 
-
-                /**
-                 * @brief Lifecycle callbacks for derived to override
-                 * 
-                 */
-                /* Setup App configs, called when App "install()" */
                 void onSetup();
-
-                /* Life cycle */
                 void onCreate();
                 void onRunning();
                 void onDestroy();
@@ -60,4 +64,3 @@ namespace MOONCAKE
 
     }
 }
-
