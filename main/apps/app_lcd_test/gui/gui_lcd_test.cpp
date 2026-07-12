@@ -52,12 +52,12 @@ void GUI_LCD_TEST::renderPage(int volumePct, bool tvOn)
 
     _canvas->setTextColor(_theme_color);
     _canvas->setTextSize(1);
-    _canvas->drawCenterString("VOLUME", bubble.x, bubble.y - 30);
+    _canvas->drawCenterString("VOLUME", bubble.x, bubble.y - 48);
 
     char string_buffer[24];
     snprintf(string_buffer, sizeof(string_buffer), "%d%%", volumePct);
     _canvas->setTextSize(3);
-    _canvas->drawCenterString(string_buffer, bubble.x, bubble.y - 8);
+    _canvas->drawCenterString(string_buffer, bubble.x, bubble.y - 30);
 
     _canvas->setTextSize(1);
     _canvas->drawCenterString("TV", bubble.x, bubble.y + 34);
