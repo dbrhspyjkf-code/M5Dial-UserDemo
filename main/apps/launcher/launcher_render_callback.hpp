@@ -65,7 +65,7 @@ static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
     "WIFI", "SCAN",
     "BLE", "SERVER",
     "AC", "CTRL",
-    "MORE", "",
+    "STOCK", "WATCH",
     "TIMER", "SET",
     "SONOS", "CTRL"
 };
@@ -78,7 +78,7 @@ static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
     image_data_icon_wifi,
     image_data_icon_ble,
     image_data_icon_temp,
-    image_data_icon_more,
+    image_data_icon_stock,
     image_data_icon_timer,
     image_data_icon_sonos
 };
