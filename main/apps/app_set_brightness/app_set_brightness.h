@@ -1,18 +1,14 @@
 /**
  * @file app_set_brightness.h
- * @author Forairaaaaa
- * @brief 
- * @version 0.1
- * @date 2023-08-04
- * 
- * @copyright Copyright (c) 2023
- * 
+ * @brief Controls the fish tank light's brightness and on/off state
+ * through Home Assistant's REST API. Touch: on/off toggle. Encoder:
+ * debounced brightness. Encoder button: quit (project-wide convention).
  */
 #pragma once
 #include "../app.h"
 #include "../../hal/hal.h"
 #include "gui/gui_set_brightness.h"
-#include "../utilities/smooth_menu/src/lv_anim/lv_anim.h"
+#include "fishtank_config.h"
 
 
 namespace MOONCAKE
@@ -21,16 +17,20 @@ namespace MOONCAKE
     {
         namespace SET_BRIGHTNESS
         {
+            enum class State { CONNECTING, CONTROLLING, ERROR };
+
             struct Data_t
             {
                 HAL::HAL* hal = nullptr;
-                
-                int16_t brightness = 128;
-                int delta_time = 0;
-                int brightness_increment;
-                uint32_t scroll_speed_time_count = 0;
 
-                LVGL::Anim_Path brightness_anim;
+                State state = State::CONNECTING;
+                std::string error_message;
+
+                int brightness_pct = 50;
+                bool light_on = true;
+
+                bool brightness_dirty = false;
+                uint32_t last_brightness_change_ms = 0;
             };
         }
 
@@ -39,27 +39,19 @@ namespace MOONCAKE
             private:
                 const char* _tag = "brightness";
 
+                void _handle_encoder();
+                void _handle_touch();
+                void _handle_brightness_debounce();
+                void _render();
+                void _refresh_state();
+
             public:
                 SET_BRIGHTNESS::Data_t _data;
                 GUI_SetBrightness _gui;
 
-
-                /**
-                 * @brief Get gui pointer for basic settings 
-                 * 
-                 * @return GUI_Base* 
-                 */
                 GUI_Base* getGui() override { return &_gui; }
 
-
-                /**
-                 * @brief Lifecycle callbacks for derived to override
-                 * 
-                 */
-                /* Setup App configs, called when App "install()" */
                 void onSetup();
-
-                /* Life cycle */
                 void onCreate();
                 void onRunning();
                 void onDestroy();
@@ -67,4 +59,3 @@ namespace MOONCAKE
 
     }
 }
-
