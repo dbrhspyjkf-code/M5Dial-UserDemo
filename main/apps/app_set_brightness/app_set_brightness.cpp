@@ -59,7 +59,13 @@ void Set_Brightness::_refresh_state()
 void Set_Brightness::onCreate()
 {
     _log("onCreate");
-    _data.state = State::CONNECTING;
+
+    /* Render the control screen immediately with default values instead
+       of a blank frame or a "Connecting..." screen - WiFi/HA_CLIENT's
+       connection are already up from boot, so the real fetch below is
+       normally fast enough that this briefly-stale render is barely
+       noticeable, then gets replaced by the real state. */
+    _data.state = State::CONTROLLING;
     _render();
 
     bool connected = WIFI_CONNECT::connect(FISHTANK_WIFI_SSID, FISHTANK_WIFI_PASSWORD, 8000);
