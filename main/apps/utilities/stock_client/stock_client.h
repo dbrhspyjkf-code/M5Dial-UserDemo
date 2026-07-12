@@ -19,7 +19,8 @@ namespace STOCK_CLIENT
         std::string code;
         std::string name;
         float price = 0.0f;
-        float chg = 0.0f;  // percentage change, e.g. 5.34 means +5.34%
+        float chg = 0.0f;      // percentage change, e.g. 5.34 means +5.34%
+        float abs_chg = 0.0f;  // absolute change in price (yuan), from the API's "pchg" field
     };
 
     /**

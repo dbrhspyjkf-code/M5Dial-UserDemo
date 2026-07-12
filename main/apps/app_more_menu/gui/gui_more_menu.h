@@ -23,9 +23,10 @@ class GUI_MoreMenu : public GUI_Base
          *
          * @param name stock name (or code, if name is empty)
          * @param price current price
+         * @param absChg absolute price change (positive = up, negative = down)
          * @param chg percentage change (positive = up, negative = down)
          * @param index 0-based position in the list
          * @param count total number of stocks
          */
-        void renderPage(const std::string& name, float price, float chg, int index, int count);
+        void renderPage(const std::string& name, float price, float absChg, float chg, int index, int count);
 };

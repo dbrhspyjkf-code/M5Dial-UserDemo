@@ -105,7 +105,7 @@ void MoreMenu::_render()
     {
         const STOCK_CLIENT::StockItem& stock = _data.stocks[_data.current_index];
         std::string display_name = stock.name.empty() ? stock.code : stock.name;
-        _gui.renderPage(display_name, stock.price, stock.chg,
+        _gui.renderPage(display_name, stock.price, stock.abs_chg, stock.chg,
                          _data.current_index, (int)_data.stocks.size());
     }
 }

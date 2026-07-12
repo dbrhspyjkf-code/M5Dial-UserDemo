@@ -106,6 +106,13 @@ namespace STOCK_CLIENT
                 cJSON* chg = cJSON_GetObjectItem(item, "chg");
                 if (cJSON_IsNumber(chg)) stock.chg = (float)chg->valuedouble;
 
+                /* Despite the name, the API's "pchg" field is the absolute
+                   price change (yuan), not a percentage - confirmed in
+                   hermes_mcp_server/main.py, where both data source paths
+                   map "chg" to change_percent and "pchg" to change. */
+                cJSON* pchg = cJSON_GetObjectItem(item, "pchg");
+                if (cJSON_IsNumber(pchg)) stock.abs_chg = (float)pchg->valuedouble;
+
                 result.push_back(stock);
             }
         }
