@@ -51,10 +51,11 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
     _canvas->fillSmoothRoundRect(bubble.x - bubble.width / 2, bubble.y - bubble.height / 2,
                                   bubble.width, bubble.height, 36, TFT_WHITE);
 
-    /* Small mode indicator, above the big value */
+    /* Small mode indicator, above the big value (moved down toward the
+       vertical middle of the bubble, was pinned too close to the top) */
     _canvas->setTextColor(_theme_color);
     _canvas->setTextSize(1);
-    _canvas->drawCenterString(brightnessMode ? "BRIGHTNESS" : "EFFECT", bubble.x, bubble.y - 68);
+    _canvas->drawCenterString(brightnessMode ? "BRIGHTNESS" : "EFFECT", bubble.x, bubble.y - 48);
 
     /* Big value: brightness percent, or the current effect name */
     _canvas->setTextSize(brightnessMode ? 3 : 2);
@@ -62,7 +63,7 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
     {
         char string_buffer[24];
         snprintf(string_buffer, sizeof(string_buffer), "%d%%", brightnessPct);
-        _canvas->drawCenterString(string_buffer, bubble.x, bubble.y - 56);
+        _canvas->drawCenterString(string_buffer, bubble.x, bubble.y - 30);
     }
     else
     {
@@ -71,15 +72,15 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
         {
             display_effect = display_effect.substr(0, display_effect.size() - 4) + "...";
         }
-        _canvas->drawCenterString(display_effect.c_str(), bubble.x, bubble.y - 50);
+        _canvas->drawCenterString(display_effect.c_str(), bubble.x, bubble.y - 22);
     }
 
     _canvas->setTextSize(1);
-    _canvas->drawCenterString("FISH LIGHT", bubble.x, bubble.y + 26);
+    _canvas->drawCenterString("FISH LIGHT", bubble.x, bubble.y + 34);
 
     /* MODE and ON/OFF buttons, side by side below the bubble (bubble bottom
        edge is at bubble.y + bubble.height/2 = 190) */
-    int btn_y = 202;
+    int btn_y = 206;
     int btn_height = 24;
 
     _canvas->setTextSize(1);
@@ -89,7 +90,7 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
     int mode_text_h = _canvas->fontHeight();
     int mode_btn_width = mode_text_w + 30;
     if (mode_btn_width < 60) mode_btn_width = 60;
-    int mode_btn_x = 75;
+    int mode_btn_x = 85;
 
     _canvas->fillSmoothRoundRect(mode_btn_x - mode_btn_width / 2, btn_y - btn_height / 2,
                                   mode_btn_width, btn_height, btn_height / 2, TFT_WHITE);
@@ -101,7 +102,7 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
     int power_text_h = _canvas->fontHeight();
     int power_btn_width = power_text_w + 30;
     if (power_btn_width < 60) power_btn_width = 60;
-    int power_btn_x = 165;
+    int power_btn_x = 155;
 
     _canvas->fillSmoothRoundRect(power_btn_x - power_btn_width / 2, btn_y - btn_height / 2,
                                   power_btn_width, btn_height, btn_height / 2, TFT_WHITE);

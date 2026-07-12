@@ -156,9 +156,9 @@ void Set_Brightness::_handle_touch()
         WIFI_CONNECT::disconnect();
         onCreate();
     }
-    else if (_data.state == State::CONTROLLING && y >= 185 && y <= 219)
+    else if (_data.state == State::CONTROLLING && y >= 189 && y <= 223)
     {
-        if (x >= 40 && x <= 110)
+        if (x >= 45 && x <= 118)
         {
             /* MODE button: only switch to EFFECT if there's something to select */
             if (_data.control_mode == ControlMode::BRIGHTNESS && !_data.effect_list.empty())
@@ -171,7 +171,7 @@ void Set_Brightness::_handle_touch()
             }
             _render();
         }
-        else if (x >= 130 && x <= 200)
+        else if (x >= 122 && x <= 195)
         {
             _data.light_on = !_data.light_on;
             HA_CLIENT::set_light_power(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
