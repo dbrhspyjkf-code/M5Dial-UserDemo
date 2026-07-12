@@ -35,4 +35,29 @@ namespace HA_CLIENT
      */
     bool set_volume(const char* base_url, const char* token,
                      const char* entity_id, float volume);
+
+    struct LightState
+    {
+        bool ok = false;
+        bool is_on = false;
+        int brightness_pct = 0; // 0-100
+    };
+
+    /**
+     * @brief GET /api/states/{entity_id} for a light entity
+     */
+    LightState get_light_state(const char* base_url, const char* token, const char* entity_id);
+
+    /**
+     * @brief POST /api/services/light/turn_on with
+     * {"entity_id": entity_id, "brightness_pct": brightness_pct}
+     */
+    bool set_light_brightness(const char* base_url, const char* token,
+                               const char* entity_id, int brightness_pct);
+
+    /**
+     * @brief POST /api/services/light/turn_on or /turn_off (no extra fields)
+     */
+    bool set_light_power(const char* base_url, const char* token,
+                          const char* entity_id, bool on);
 }
