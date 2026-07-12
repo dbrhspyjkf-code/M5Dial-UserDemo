@@ -16,6 +16,7 @@
 #include "apps/launcher/launcher.h"
 #include "apps/app_factory_test/app_factory_test.h"
 #include "apps/utilities/wifi_connect_wrap/wifi_connect_wrap.h"
+#include "apps/utilities/ha_client/ha_client.h"
 #include "apps/utilities/rfid_service/rfid_service.h"
 #include "apps/utilities/rfid_service/rfid_service_config.h"
 
@@ -35,6 +36,7 @@ extern "C" void app_main(void)
        instantly and tapping the phone card works regardless of which
        app (if any) is open */
     WIFI_CONNECT::connect(RFID_WIFI_SSID, RFID_WIFI_PASSWORD, 8000);
+    HA_CLIENT::init();
     RFID_SERVICE::init(&hal);
 
 /* Check factory test mode */

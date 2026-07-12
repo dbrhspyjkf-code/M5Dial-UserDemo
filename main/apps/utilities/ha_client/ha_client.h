@@ -1,8 +1,14 @@
 /**
  * @file ha_client.h
- * @brief Thin wrapper around esp_http_client + cJSON for the two Home
- * Assistant REST call shapes this project needs: read a media_player's
- * state, and call a media_player service.
+ * @brief Thin wrapper around esp_http_client + cJSON for the Home
+ * Assistant REST calls this project needs. Uses one persistent,
+ * mutex-guarded esp_http_client connection for the device's whole
+ * lifetime (instead of creating/destroying a client per call) - avoids
+ * the ~400 byte internal-heap loss per call that previously
+ * accumulated every time an HA app or RFID_SERVICE made a request,
+ * eventually causing "unreachable" connect timeouts under memory
+ * pressure. The mutex also makes it safe to call from RFID_SERVICE's
+ * background task and an open app's task at the same time.
  */
 #pragma once
 #include <string>
@@ -10,6 +16,13 @@
 
 namespace HA_CLIENT
 {
+    /**
+     * @brief Create the shared client and mutex. Call exactly once, at
+     * boot, before any other HA_CLIENT function or RFID_SERVICE::init()
+     * (RFID_SERVICE's scan handler calls into HA_CLIENT too).
+     */
+    void init();
+
     struct MediaPlayerState
     {
         bool ok = false;

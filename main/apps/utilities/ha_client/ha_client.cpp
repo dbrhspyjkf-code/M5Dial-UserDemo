@@ -8,11 +8,15 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 
 namespace HA_CLIENT
 {
     static const char* TAG = "ha_client";
+    static esp_http_client_handle_t s_client = nullptr;
+    static SemaphoreHandle_t s_mutex = nullptr;
 
     struct ResponseBuffer
     {
@@ -37,47 +41,79 @@ namespace HA_CLIENT
         return ESP_OK;
     }
 
-    static esp_http_client_handle_t _make_client(const char* url, const char* token,
-                                                  esp_http_client_method_t method,
-                                                  ResponseBuffer* resp_buf)
+    void init()
     {
+        if (s_client != nullptr)
+            return;
+
+        s_mutex = xSemaphoreCreateMutex();
+
         esp_http_client_config_t config = {};
-        config.url = url;
-        config.method = method;
+        config.url = "http://localhost/"; /* overwritten before every perform() */
         config.timeout_ms = 5000;
         config.event_handler = _http_event_handler;
-        config.user_data = resp_buf;
 
-        esp_http_client_handle_t client = esp_http_client_init(&config);
+        s_client = esp_http_client_init(&config);
+    }
+
+    /**
+     * @brief Perform one request on the shared, persistent client. Mutex
+     * serializes every caller (RFID_SERVICE's background task and
+     * whichever app is open both call into this).
+     */
+    static bool _perform(const char* base_url, const char* token, const char* path,
+                         esp_http_client_method_t method, const char* body,
+                         ResponseBuffer* resp_buf)
+    {
+        xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+        char url[256];
+        snprintf(url, sizeof(url), "%s%s", base_url, path);
+
+        resp_buf->len = 0;
+        resp_buf->data[0] = '\0';
+
+        esp_http_client_set_url(s_client, url);
+        esp_http_client_set_method(s_client, method);
+        esp_http_client_set_user_data(s_client, resp_buf);
 
         char auth_header[512];
         snprintf(auth_header, sizeof(auth_header), "Bearer %s", token);
-        esp_http_client_set_header(client, "Authorization", auth_header);
-        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_http_client_set_header(s_client, "Authorization", auth_header);
+        esp_http_client_set_header(s_client, "Content-Type", "application/json");
 
-        return client;
+        if (body != nullptr)
+        {
+            esp_http_client_set_post_field(s_client, body, (int)strlen(body));
+        }
+        else
+        {
+            esp_http_client_set_post_field(s_client, nullptr, 0);
+        }
+
+        esp_err_t err = esp_http_client_perform(s_client);
+        int status = esp_http_client_get_status_code(s_client);
+
+        xSemaphoreGive(s_mutex);
+
+        if (err != ESP_OK || status != 200)
+        {
+            ESP_LOGE(TAG, "%s failed: err=%d status=%d", path, err, status);
+            return false;
+        }
+        return true;
     }
 
     MediaPlayerState get_state(const char* base_url, const char* token, const char* entity_id)
     {
         MediaPlayerState result;
 
-        char url[256];
-        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
 
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
-        esp_err_t err = esp_http_client_perform(client);
-
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
         {
-            ESP_LOGE(TAG, "get_state failed: err=%d status=%d", err, status);
             return result;
         }
 
@@ -124,26 +160,8 @@ namespace HA_CLIENT
     static bool _post_json(const char* base_url, const char* token,
                            const char* path, const char* json_body)
     {
-        char url[256];
-        snprintf(url, sizeof(url), "%s%s", base_url, path);
-
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_POST, &resp_buf);
-        esp_http_client_set_post_field(client, json_body, (int)strlen(json_body));
-
-        esp_err_t err = esp_http_client_perform(client);
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
-        {
-            ESP_LOGE(TAG, "POST %s failed: err=%d status=%d", path, err, status);
-            return false;
-        }
-        return true;
+        return _perform(base_url, token, path, HTTP_METHOD_POST, json_body, &resp_buf);
     }
 
     bool call_service(const char* base_url, const char* token,
@@ -173,22 +191,12 @@ namespace HA_CLIENT
     {
         LightState result;
 
-        char url[256];
-        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
 
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
-        esp_err_t err = esp_http_client_perform(client);
-
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
         {
-            ESP_LOGE(TAG, "get_light_state failed: err=%d status=%d", err, status);
             return result;
         }
 
@@ -278,22 +286,12 @@ namespace HA_CLIENT
     {
         SwitchState result;
 
-        char url[256];
-        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
 
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
-        esp_err_t err = esp_http_client_perform(client);
-
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
         {
-            ESP_LOGE(TAG, "get_switch_state failed: err=%d status=%d", err, status);
             return result;
         }
 
@@ -320,22 +318,12 @@ namespace HA_CLIENT
     {
         NumberState result;
 
-        char url[256];
-        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
 
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
-        esp_err_t err = esp_http_client_perform(client);
-
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
         {
-            ESP_LOGE(TAG, "get_number_state failed: err=%d status=%d", err, status);
             return result;
         }
 
@@ -391,22 +379,12 @@ namespace HA_CLIENT
     {
         FanState result;
 
-        char url[256];
-        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
 
         ResponseBuffer resp_buf;
-        resp_buf.len = 0;
-        resp_buf.data[0] = '\0';
-
-        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
-        esp_err_t err = esp_http_client_perform(client);
-
-        int status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK || status != 200)
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
         {
-            ESP_LOGE(TAG, "get_fan_state failed: err=%d status=%d", err, status);
             return result;
         }
 
