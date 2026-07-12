@@ -55,6 +55,10 @@ namespace RFID_SERVICE
         memset(&config, 0, sizeof(rc522_config_t));
         config.transport = RC522_TRANSPORT_I2C;
         config.i2c.port = I2C_NUM_0;
+        /* Default stack (4KB) overflows once the scan event handler makes
+           blocking esp_http_client calls to Home Assistant - give it
+           enough room for HTTP header/body allocations. */
+        config.task_stack_size = 8192;
 
         rc522_create(&config, &s_rc522_handle);
         rc522_register_events(s_rc522_handle, RC522_EVENT_ANY, _event_handler, nullptr);
