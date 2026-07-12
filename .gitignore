@@ -7,4 +7,5 @@ main/apps/app_sonos/sonos_config.h
 main/apps/app_set_brightness/fishtank_config.h
 main/apps/app_lcd_test/tv_config.h
 main/apps/utilities/rfid_service/rfid_service_config.h
+main/apps/app_rtc_test/fan_config.h
 
