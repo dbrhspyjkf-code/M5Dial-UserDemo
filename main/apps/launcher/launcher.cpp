@@ -10,6 +10,7 @@
  */
 #include "launcher.h"
 #include "../common_define.h"
+#include "../utilities/idle_screen/idle_screen.h"
 
 
 using namespace MOONCAKE::USER_APP;
@@ -351,7 +352,10 @@ void Launcher::_simple_app_manager(MOONCAKE::APP_BASE* app)
     app->onCreate();
     while (1)
     {
-        app->onRunning();
+        if (!IDLE_SCREEN::tick(_data.hal))
+        {
+            app->onRunning();
+        }
         if (app->isGoingDestroy())
         {
             app->resetGoingDestroyFlag();
