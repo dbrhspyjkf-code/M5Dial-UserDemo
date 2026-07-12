@@ -131,7 +131,6 @@ void LCD_Test::_handle_touch()
     {
         _data.state = State::CONNECTING;
         _render();
-        WIFI_CONNECT::disconnect();
         onCreate();
     }
     else if (_data.state == State::CONTROLLING && x >= 85 && x <= 155 && y >= 189 && y <= 223)
@@ -196,7 +195,8 @@ void LCD_Test::onDestroy()
 {
     _log("onDestroy");
 
-    WIFI_CONNECT::disconnect();
+    /* WiFi is connected once at boot (main.cpp) and stays up for
+       RFID_SERVICE - this app must not disconnect it on close. */
 
     /* Shared canvas: leave text size back at the default so the launcher's
        tag rendering isn't left using whatever size this app last drew with. */
