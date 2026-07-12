@@ -9,4 +9,5 @@ main/apps/app_lcd_test/tv_config.h
 main/apps/utilities/rfid_service/rfid_service_config.h
 main/apps/app_rtc_test/fan_config.h
 main/apps/app_temp_demo/ac_config.h
+main/apps/app_more_menu/stock_config.h
 
