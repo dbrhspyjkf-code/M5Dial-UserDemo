@@ -9,6 +9,7 @@
 #include "../../hal/hal.h"
 #include "gui/gui_set_brightness.h"
 #include "fishtank_config.h"
+#include <vector>
 
 
 namespace MOONCAKE
@@ -18,6 +19,7 @@ namespace MOONCAKE
         namespace SET_BRIGHTNESS
         {
             enum class State { CONNECTING, CONTROLLING, ERROR };
+            enum class ControlMode { BRIGHTNESS, EFFECT };
 
             struct Data_t
             {
@@ -31,6 +33,12 @@ namespace MOONCAKE
 
                 bool brightness_dirty = false;
                 uint32_t last_brightness_change_ms = 0;
+
+                ControlMode control_mode = ControlMode::BRIGHTNESS;
+                std::vector<std::string> effect_list;
+                int effect_index = 0;
+                bool effect_dirty = false;
+                uint32_t last_effect_change_ms = 0;
             };
         }
 
@@ -42,6 +50,7 @@ namespace MOONCAKE
                 void _handle_encoder();
                 void _handle_touch();
                 void _handle_brightness_debounce();
+                void _handle_effect_debounce();
                 void _render();
                 void _refresh_state();
 

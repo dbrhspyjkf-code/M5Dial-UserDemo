@@ -40,6 +40,19 @@ void Set_Brightness::_refresh_state()
     {
         _data.brightness_pct = light.brightness_pct;
     }
+
+    _data.effect_list = light.effect_list;
+    if (!_data.effect_list.empty())
+    {
+        for (size_t i = 0; i < _data.effect_list.size(); i++)
+        {
+            if (_data.effect_list[i] == light.effect)
+            {
+                _data.effect_index = (int)i;
+                break;
+            }
+        }
+    }
 }
 
 
@@ -75,13 +88,25 @@ void Set_Brightness::_handle_encoder()
     if (!_data.hal->encoder.wasMoved(true))
         return;
 
-    int step = (_data.hal->encoder.getDirection() < 1) ? 5 : -5;
-    _data.brightness_pct += step;
-    if (_data.brightness_pct < 0) _data.brightness_pct = 0;
-    if (_data.brightness_pct > 100) _data.brightness_pct = 100;
+    int direction = (_data.hal->encoder.getDirection() < 1) ? 1 : -1;
 
-    _data.brightness_dirty = true;
-    _data.last_brightness_change_ms = millis();
+    if (_data.control_mode == ControlMode::BRIGHTNESS)
+    {
+        _data.brightness_pct += direction * 5;
+        if (_data.brightness_pct < 0) _data.brightness_pct = 0;
+        if (_data.brightness_pct > 100) _data.brightness_pct = 100;
+
+        _data.brightness_dirty = true;
+        _data.last_brightness_change_ms = millis();
+    }
+    else if (!_data.effect_list.empty())
+    {
+        int count = (int)_data.effect_list.size();
+        _data.effect_index = ((_data.effect_index + direction) % count + count) % count;
+
+        _data.effect_dirty = true;
+        _data.last_effect_change_ms = millis();
+    }
 
     _render();
 }
@@ -101,6 +126,20 @@ void Set_Brightness::_handle_brightness_debounce()
 }
 
 
+void Set_Brightness::_handle_effect_debounce()
+{
+    if (!_data.effect_dirty)
+        return;
+
+    if (millis() - _data.last_effect_change_ms < 400)
+        return;
+
+    HA_CLIENT::set_light_effect(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN, FISHTANK_ENTITY_ID,
+                                 _data.effect_list[_data.effect_index].c_str());
+    _data.effect_dirty = false;
+}
+
+
 void Set_Brightness::_handle_touch()
 {
     if (!_data.hal->tp.isTouched())
@@ -117,13 +156,29 @@ void Set_Brightness::_handle_touch()
         WIFI_CONNECT::disconnect();
         onCreate();
     }
-    else if (_data.state == State::CONTROLLING && x >= 85 && x <= 155 && y >= 185 && y <= 219)
+    else if (_data.state == State::CONTROLLING && y >= 185 && y <= 219)
     {
-        _data.light_on = !_data.light_on;
-        HA_CLIENT::set_light_power(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
-                                    FISHTANK_ENTITY_ID, _data.light_on);
-        _refresh_state();
-        _render();
+        if (x >= 40 && x <= 110)
+        {
+            /* MODE button: only switch to EFFECT if there's something to select */
+            if (_data.control_mode == ControlMode::BRIGHTNESS && !_data.effect_list.empty())
+            {
+                _data.control_mode = ControlMode::EFFECT;
+            }
+            else
+            {
+                _data.control_mode = ControlMode::BRIGHTNESS;
+            }
+            _render();
+        }
+        else if (x >= 130 && x <= 200)
+        {
+            _data.light_on = !_data.light_on;
+            HA_CLIENT::set_light_power(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
+                                        FISHTANK_ENTITY_ID, _data.light_on);
+            _refresh_state();
+            _render();
+        }
     }
 
     while (_data.hal->tp.isTouched())
@@ -146,7 +201,12 @@ void Set_Brightness::_render()
     }
     else
     {
-        _gui.renderPage(_data.brightness_pct, _data.light_on);
+        std::string effect_name = _data.effect_list.empty()
+            ? "(no effects)"
+            : _data.effect_list[_data.effect_index];
+
+        _gui.renderPage(_data.control_mode == ControlMode::BRIGHTNESS,
+                         _data.brightness_pct, effect_name, _data.light_on);
     }
 }
 
@@ -155,6 +215,7 @@ void Set_Brightness::onRunning()
 {
     _handle_encoder();
     _handle_brightness_debounce();
+    _handle_effect_debounce();
     _handle_touch();
 
     /* If button pressed: quit, unconditionally (same convention as every other app) */

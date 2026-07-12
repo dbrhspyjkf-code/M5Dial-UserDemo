@@ -19,10 +19,13 @@ class GUI_SetBrightness : public GUI_Base
         void renderStatus(const std::string& line1, const std::string& line2);
 
         /**
-         * @brief Render the normal brightness-control screen
+         * @brief Render the normal control screen
          *
-         * @param brightnessPct 0-100
-         * @param lightOn current on/off state (affects the toggle button label)
+         * @param brightnessMode true = show/adjust brightness, false = show/adjust effect
+         * @param brightnessPct 0-100 (shown when brightnessMode is true)
+         * @param effectName current effect name, or "(no effects)" (shown when brightnessMode is false)
+         * @param lightOn current on/off state (affects the ON/OFF button label)
          */
-        void renderPage(int brightnessPct, bool lightOn);
+        void renderPage(bool brightnessMode, int brightnessPct,
+                         const std::string& effectName, bool lightOn);
 };
