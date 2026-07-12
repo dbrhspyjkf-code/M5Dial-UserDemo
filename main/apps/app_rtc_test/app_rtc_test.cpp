@@ -119,7 +119,7 @@ void RTC_Test::_handle_touch()
     }
     else if (_data.state == State::CONTROLLING && y >= 189 && y <= 223)
     {
-        if (x >= 45 && x <= 118)
+        if (x >= 30 && x <= 118)
         {
             /* POWER button */
             _data.fan_on = !_data.fan_on;
@@ -127,7 +127,7 @@ void RTC_Test::_handle_touch()
             _refresh_state();
             _render();
         }
-        else if (x >= 122 && x <= 195)
+        else if (x >= 122 && x <= 210)
         {
             /* SWING button */
             _data.oscillating = !_data.oscillating;

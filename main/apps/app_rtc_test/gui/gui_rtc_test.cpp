@@ -73,7 +73,7 @@ void GUI_RTC_Test::renderPage(bool fanOn, int percentage, bool oscillating)
     int power_text_h = _canvas->fontHeight();
     int power_btn_width = power_text_w + 30;
     if (power_btn_width < 60) power_btn_width = 60;
-    int power_btn_x = 85;
+    int power_btn_x = 78;
 
     _canvas->fillSmoothRoundRect(power_btn_x - power_btn_width / 2, btn_y - btn_height / 2,
                                   power_btn_width, btn_height, btn_height / 2, TFT_WHITE);
@@ -88,7 +88,7 @@ void GUI_RTC_Test::renderPage(bool fanOn, int percentage, bool oscillating)
     int swing_text_h = _canvas->fontHeight();
     int swing_btn_width = swing_text_w + 30;
     if (swing_btn_width < 60) swing_btn_width = 60;
-    int swing_btn_x = 155;
+    int swing_btn_x = 162;
 
     uint32_t swing_btn_color = oscillating ? TFT_WHITE : 0x666666U;
     uint32_t swing_text_color = oscillating ? _theme_color : TFT_WHITE;
