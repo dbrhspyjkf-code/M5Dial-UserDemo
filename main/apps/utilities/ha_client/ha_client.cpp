@@ -450,4 +450,100 @@ namespace HA_CLIENT
 
         return _post_json(base_url, token, "/api/services/fan/oscillate", body);
     }
+
+
+    ClimateState get_climate_state(const char* base_url, const char* token, const char* entity_id)
+    {
+        ClimateState result;
+
+        char path[192];
+        snprintf(path, sizeof(path), "/api/states/%s", entity_id);
+
+        ResponseBuffer resp_buf;
+        if (!_perform(base_url, token, path, HTTP_METHOD_GET, nullptr, &resp_buf))
+        {
+            return result;
+        }
+
+        cJSON* root = cJSON_Parse(resp_buf.data);
+        if (root == nullptr)
+        {
+            ESP_LOGE(TAG, "get_climate_state: JSON parse failed");
+            return result;
+        }
+
+        cJSON* state = cJSON_GetObjectItem(root, "state");
+        if (cJSON_IsString(state))
+        {
+            result.hvac_mode = state->valuestring;
+        }
+
+        cJSON* attributes = cJSON_GetObjectItem(root, "attributes");
+        if (attributes != nullptr)
+        {
+            cJSON* target_temp = cJSON_GetObjectItem(attributes, "temperature");
+            if (cJSON_IsNumber(target_temp))
+            {
+                result.target_temp = (float)target_temp->valuedouble;
+            }
+
+            cJSON* current_temp = cJSON_GetObjectItem(attributes, "current_temperature");
+            if (cJSON_IsNumber(current_temp))
+            {
+                result.current_temp = (float)current_temp->valuedouble;
+            }
+
+            cJSON* min_temp = cJSON_GetObjectItem(attributes, "min_temp");
+            if (cJSON_IsNumber(min_temp))
+            {
+                result.min_temp = (float)min_temp->valuedouble;
+            }
+
+            cJSON* max_temp = cJSON_GetObjectItem(attributes, "max_temp");
+            if (cJSON_IsNumber(max_temp))
+            {
+                result.max_temp = (float)max_temp->valuedouble;
+            }
+
+            cJSON* hvac_modes = cJSON_GetObjectItem(attributes, "hvac_modes");
+            if (cJSON_IsArray(hvac_modes))
+            {
+                int count = cJSON_GetArraySize(hvac_modes);
+                for (int i = 0; i < count; i++)
+                {
+                    cJSON* item = cJSON_GetArrayItem(hvac_modes, i);
+                    if (cJSON_IsString(item))
+                    {
+                        result.hvac_modes.push_back(item->valuestring);
+                    }
+                }
+            }
+        }
+
+        cJSON_Delete(root);
+        result.ok = true;
+        return result;
+    }
+
+
+    bool set_climate_temperature(const char* base_url, const char* token,
+                                  const char* entity_id, float temperature)
+    {
+        char body[160];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"temperature\": %.1f}",
+                 entity_id, temperature);
+
+        return _post_json(base_url, token, "/api/services/climate/set_temperature", body);
+    }
+
+
+    bool set_climate_hvac_mode(const char* base_url, const char* token,
+                                const char* entity_id, const char* hvac_mode)
+    {
+        char body[192];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"hvac_mode\": \"%s\"}",
+                 entity_id, hvac_mode);
+
+        return _post_json(base_url, token, "/api/services/climate/set_hvac_mode", body);
+    }
 }

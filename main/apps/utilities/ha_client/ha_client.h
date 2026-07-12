@@ -149,4 +149,36 @@ namespace HA_CLIENT
      */
     bool set_fan_oscillating(const char* base_url, const char* token,
                               const char* entity_id, bool oscillating);
+
+    struct ClimateState
+    {
+        bool ok = false;
+        std::string hvac_mode;                 // e.g. "cool", "heat", "off", "fan_only", "dry", "auto"
+        float target_temp = 0.0f;
+        float current_temp = 0.0f;
+        std::vector<std::string> hvac_modes;    // modes this entity actually supports
+        float min_temp = 16.0f;
+        float max_temp = 30.0f;
+    };
+
+    /**
+     * @brief GET /api/states/{entity_id} for a climate entity. The
+     * entity's top-level "state" IS the current hvac_mode itself (not
+     * "on"/"off"), same shape as the number domain's value-as-state.
+     */
+    ClimateState get_climate_state(const char* base_url, const char* token, const char* entity_id);
+
+    /**
+     * @brief POST /api/services/climate/set_temperature with
+     * {"entity_id": entity_id, "temperature": temperature}
+     */
+    bool set_climate_temperature(const char* base_url, const char* token,
+                                  const char* entity_id, float temperature);
+
+    /**
+     * @brief POST /api/services/climate/set_hvac_mode with
+     * {"entity_id": entity_id, "hvac_mode": hvac_mode}
+     */
+    bool set_climate_hvac_mode(const char* base_url, const char* token,
+                                const char* entity_id, const char* hvac_mode);
 }
