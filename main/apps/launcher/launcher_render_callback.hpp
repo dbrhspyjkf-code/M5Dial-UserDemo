@@ -59,7 +59,7 @@ static std::array<uint32_t, ICON_NUM> icon_color_list = {
 /* Icon tag */
 static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
     "TV", "CTRL",
-    "RTC", "TIME",
+    "FAN", "CTRL",
     "RFID", "TEST",
     "BRIGHTNESS", "SET",
     "WIFI", "SCAN",
@@ -72,7 +72,7 @@ static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
 /* Icon pic */
 static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
     image_data_icon_lcd,
-    image_data_icon_rtc,
+    image_data_icon_fan,
     image_data_icon_rfid,
     image_data_icon_brigntness,
     image_data_icon_wifi,
