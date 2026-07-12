@@ -1,17 +1,15 @@
 /**
  * @file app_rtc_test.h
- * @author Forairaaaaa
- * @brief
- * @version 0.1
- * @date 2023-08-03
- *
- * @copyright Copyright (c) 2023
- *
+ * @brief Controls the floor fan's power, oscillation, and speed through
+ * Home Assistant's REST API. Touch: power/swing toggles. Encoder:
+ * debounced speed. Encoder button: quit (project-wide convention).
  */
 #pragma once
 #include "../app.h"
 #include "../../hal/hal.h"
 #include "gui/gui_rtc_test.h"
+#include "fan_config.h"
+
 
 namespace MOONCAKE
 {
@@ -19,11 +17,21 @@ namespace MOONCAKE
     {
         namespace RTC_TEST
         {
+            enum class State { CONNECTING, CONTROLLING, ERROR };
+
             struct Data_t
             {
                 HAL::HAL* hal = nullptr;
-                tm rtc_time;
-                uint32_t time_count = 0;
+
+                State state = State::CONNECTING;
+                std::string error_message;
+
+                bool fan_on = false;
+                int percentage = 50;
+                bool oscillating = false;
+
+                bool percentage_dirty = false;
+                uint32_t last_percentage_change_ms = 0;
             };
         } // namespace RTC_TEST
 
@@ -32,25 +40,19 @@ namespace MOONCAKE
         private:
             const char* _tag = "rtc";
 
+            void _handle_encoder();
+            void _handle_touch();
+            void _handle_percentage_debounce();
+            void _render();
+            void _refresh_state();
+
         public:
             RTC_TEST::Data_t _data;
             GUI_RTC_Test _gui;
 
-            /**
-             * @brief Get gui pointer for basic settings
-             *
-             * @return GUI_Base*
-             */
             GUI_Base* getGui() override { return &_gui; }
 
-            /**
-             * @brief Lifecycle callbacks for derived to override
-             *
-             */
-            /* Setup App configs, called when App "install()" */
             void onSetup();
-
-            /* Life cycle */
             void onCreate();
             void onRunning();
             void onDestroy();
