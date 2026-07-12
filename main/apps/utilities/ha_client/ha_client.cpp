@@ -4,6 +4,7 @@
 #include "ha_client.h"
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
@@ -270,5 +271,118 @@ namespace HA_CLIENT
                  entity_id, effect_name);
 
         return _post_json(base_url, token, "/api/services/light/turn_on", body);
+    }
+
+
+    SwitchState get_switch_state(const char* base_url, const char* token, const char* entity_id)
+    {
+        SwitchState result;
+
+        char url[256];
+        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+
+        ResponseBuffer resp_buf;
+        resp_buf.len = 0;
+        resp_buf.data[0] = '\0';
+
+        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
+        esp_err_t err = esp_http_client_perform(client);
+
+        int status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+
+        if (err != ESP_OK || status != 200)
+        {
+            ESP_LOGE(TAG, "get_switch_state failed: err=%d status=%d", err, status);
+            return result;
+        }
+
+        cJSON* root = cJSON_Parse(resp_buf.data);
+        if (root == nullptr)
+        {
+            ESP_LOGE(TAG, "get_switch_state: JSON parse failed");
+            return result;
+        }
+
+        cJSON* state = cJSON_GetObjectItem(root, "state");
+        if (cJSON_IsString(state))
+        {
+            result.is_on = (strcmp(state->valuestring, "on") == 0);
+        }
+
+        cJSON_Delete(root);
+        result.ok = true;
+        return result;
+    }
+
+
+    NumberState get_number_state(const char* base_url, const char* token, const char* entity_id)
+    {
+        NumberState result;
+
+        char url[256];
+        snprintf(url, sizeof(url), "%s/api/states/%s", base_url, entity_id);
+
+        ResponseBuffer resp_buf;
+        resp_buf.len = 0;
+        resp_buf.data[0] = '\0';
+
+        esp_http_client_handle_t client = _make_client(url, token, HTTP_METHOD_GET, &resp_buf);
+        esp_err_t err = esp_http_client_perform(client);
+
+        int status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+
+        if (err != ESP_OK || status != 200)
+        {
+            ESP_LOGE(TAG, "get_number_state failed: err=%d status=%d", err, status);
+            return result;
+        }
+
+        cJSON* root = cJSON_Parse(resp_buf.data);
+        if (root == nullptr)
+        {
+            ESP_LOGE(TAG, "get_number_state: JSON parse failed");
+            return result;
+        }
+
+        /* For the number domain, top-level "state" IS the value, as a
+           numeric string (e.g. "45.0"), not "on"/"off". */
+        cJSON* state = cJSON_GetObjectItem(root, "state");
+        if (cJSON_IsString(state))
+        {
+            result.value = strtof(state->valuestring, nullptr);
+        }
+
+        cJSON* attributes = cJSON_GetObjectItem(root, "attributes");
+        if (attributes != nullptr)
+        {
+            cJSON* min_attr = cJSON_GetObjectItem(attributes, "min");
+            if (cJSON_IsNumber(min_attr))
+            {
+                result.min = (float)min_attr->valuedouble;
+            }
+
+            cJSON* max_attr = cJSON_GetObjectItem(attributes, "max");
+            if (cJSON_IsNumber(max_attr))
+            {
+                result.max = (float)max_attr->valuedouble;
+            }
+        }
+
+        cJSON_Delete(root);
+        result.ok = true;
+        return result;
+    }
+
+
+    bool set_number_value(const char* base_url, const char* token,
+                           const char* entity_id, float value)
+    {
+        char body[160];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"value\": %.2f}",
+                 entity_id, value);
+
+        return _post_json(base_url, token, "/api/services/number/set_value", body);
     }
 }

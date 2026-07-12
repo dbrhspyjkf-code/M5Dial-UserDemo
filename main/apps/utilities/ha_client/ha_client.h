@@ -70,4 +70,37 @@ namespace HA_CLIENT
      */
     bool set_light_effect(const char* base_url, const char* token,
                            const char* entity_id, const char* effect_name);
+
+    struct SwitchState
+    {
+        bool ok = false;
+        bool is_on = false;
+    };
+
+    /**
+     * @brief GET /api/states/{entity_id} for a switch entity
+     */
+    SwitchState get_switch_state(const char* base_url, const char* token, const char* entity_id);
+
+    struct NumberState
+    {
+        bool ok = false;
+        float value = 0.0f;
+        float min = 0.0f;
+        float max = 100.0f;
+    };
+
+    /**
+     * @brief GET /api/states/{entity_id} for a number entity. Unlike other
+     * domains, HA's top-level "state" field for number entities is the
+     * value itself (a numeric string), not "on"/"off".
+     */
+    NumberState get_number_state(const char* base_url, const char* token, const char* entity_id);
+
+    /**
+     * @brief POST /api/services/number/set_value with
+     * {"entity_id": entity_id, "value": value}
+     */
+    bool set_number_value(const char* base_url, const char* token,
+                           const char* entity_id, float value);
 }
