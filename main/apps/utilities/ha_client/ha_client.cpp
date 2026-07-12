@@ -215,6 +215,26 @@ namespace HA_CLIENT
                     /* HA's light.brightness is 0-255; convert to 0-100 */
                     result.brightness_pct = (brightness->valueint * 100 + 127) / 255;
                 }
+
+                cJSON* effect = cJSON_GetObjectItem(attributes, "effect");
+                if (cJSON_IsString(effect))
+                {
+                    result.effect = effect->valuestring;
+                }
+
+                cJSON* effect_list = cJSON_GetObjectItem(attributes, "effect_list");
+                if (cJSON_IsArray(effect_list))
+                {
+                    int count = cJSON_GetArraySize(effect_list);
+                    for (int i = 0; i < count; i++)
+                    {
+                        cJSON* item = cJSON_GetArrayItem(effect_list, i);
+                        if (cJSON_IsString(item))
+                        {
+                            result.effect_list.push_back(item->valuestring);
+                        }
+                    }
+                }
             }
         }
 
@@ -239,5 +259,16 @@ namespace HA_CLIENT
                           const char* entity_id, bool on)
     {
         return call_service(base_url, token, "light", on ? "turn_on" : "turn_off", entity_id);
+    }
+
+
+    bool set_light_effect(const char* base_url, const char* token,
+                           const char* entity_id, const char* effect_name)
+    {
+        char body[192];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"effect\": \"%s\"}",
+                 entity_id, effect_name);
+
+        return _post_json(base_url, token, "/api/services/light/turn_on", body);
     }
 }

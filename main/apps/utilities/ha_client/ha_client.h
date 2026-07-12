@@ -6,6 +6,7 @@
  */
 #pragma once
 #include <string>
+#include <vector>
 
 namespace HA_CLIENT
 {
@@ -40,7 +41,9 @@ namespace HA_CLIENT
     {
         bool ok = false;
         bool is_on = false;
-        int brightness_pct = 0; // 0-100
+        int brightness_pct = 0;                // 0-100
+        std::string effect;                    // currently active effect name (may be empty)
+        std::vector<std::string> effect_list;  // available effect names (may be empty)
     };
 
     /**
@@ -60,4 +63,11 @@ namespace HA_CLIENT
      */
     bool set_light_power(const char* base_url, const char* token,
                           const char* entity_id, bool on);
+
+    /**
+     * @brief POST /api/services/light/turn_on with
+     * {"entity_id": entity_id, "effect": effect_name}
+     */
+    bool set_light_effect(const char* base_url, const char* token,
+                           const char* entity_id, const char* effect_name);
 }
