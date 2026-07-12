@@ -91,7 +91,7 @@ void VideoShit::_handle_encoder()
 
     int direction = (_data.hal->encoder.getDirection() < 1) ? 1 : -1;
 
-    _data.target_temp += direction * 0.5f;
+    _data.target_temp += direction * 1.0f;
     if (_data.target_temp < _data.min_temp) _data.target_temp = _data.min_temp;
     if (_data.target_temp > _data.max_temp) _data.target_temp = _data.max_temp;
 
