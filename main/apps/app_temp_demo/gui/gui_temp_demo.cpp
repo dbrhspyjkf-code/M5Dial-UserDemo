@@ -1,81 +1,102 @@
 /**
  * @file gui_temp_demo.cpp
- * @author Forairaaaaa
- * @brief 
- * @version 0.1
- * @date 2023-08-10
- * 
- * @copyright Copyright (c) 2023
- * 
  */
 #include "gui_temp_demo.h"
-
-
-#define delay(ms) SDL_Delay(ms)
+#include <cstdio>
 
 
 void GUI_VideoShit::init()
 {
-    _theme_color = 0x008CD6;
+}
 
+
+void GUI_VideoShit::renderStatus(const std::string& line1, const std::string& line2)
+{
     _canvas->fillScreen(_theme_color);
-    
+    _draw_top_icon();
 
-    printf("%d\n", _temp);
-    _canvas->pushImage(0, 50 - 10, 240, 110, _pic_temp_list[_temp]);
+    BasicObeject_t bubble;
+    bubble.x = 120;
+    bubble.y = 120;
+    bubble.width = 240;
+    bubble.height = 140;
+    _canvas->fillSmoothRoundRect(bubble.x - bubble.width / 2, bubble.y - bubble.height / 2,
+                                  bubble.width, bubble.height, 36, TFT_WHITE);
 
-    if (_button_state)
-        _canvas->pushImage(0, 160, 240, 82, _pic_button_list[0]);
-    else
-        _canvas->pushImage(0, 160, 240, 82, _pic_button_list[1]);
+    _canvas->setTextColor(_theme_color);
+    _canvas->setTextSize(2);
+    int h1 = _canvas->fontHeight();
+    _canvas->drawCenterString(line1.c_str(), bubble.x, bubble.y - h1 / 2);
 
-    /* Cover shit */
-    _canvas->fillRect(0, 120, 10, 40, _theme_color);
-    _canvas->fillRect(240 - 10, 120, 10, 40, _theme_color);
+    _canvas->setTextSize(1);
+    _canvas->drawCenterString(line2.c_str(), bubble.x, bubble.y + 30);
 
-
-
+    _draw_quit_button();
     _canvas->pushSprite(0, 0);
 }
 
 
-void GUI_VideoShit::renderPage()
+void GUI_VideoShit::renderPage(bool acOn, float targetTemp, const std::string& modeName)
 {
-    init();
-}
+    _canvas->fillScreen(_theme_color);
 
+    _draw_top_icon();
 
-void GUI_VideoShit::tempUp()
-{
-    _temp++;
-    if (_temp > _pic_temp_list.size() - 1)
-    {
-        _temp = _pic_temp_list.size() - 1;
-    }
-    renderPage();
-}
+    BasicObeject_t bubble;
+    bubble.x = 120;
+    bubble.y = 120;
+    bubble.width = 240;
+    bubble.height = 140;
+    _canvas->fillSmoothRoundRect(bubble.x - bubble.width / 2, bubble.y - bubble.height / 2,
+                                  bubble.width, bubble.height, 36, TFT_WHITE);
 
+    _canvas->setTextColor(_theme_color);
+    _canvas->setTextSize(1);
+    _canvas->drawCenterString("TARGET", bubble.x, bubble.y - 48);
 
-void GUI_VideoShit::tempDown()
-{
-    _temp--;
-    if (_temp < 0)
-    {
-        _temp = 0;
-    }
-    renderPage();
-}
+    char string_buffer[24];
+    snprintf(string_buffer, sizeof(string_buffer), "%.1f%cC", targetTemp, 176 /* degree symbol, ASCII 0xB0 */);
+    _canvas->setTextSize(3);
+    _canvas->drawCenterString(string_buffer, bubble.x, bubble.y - 30);
 
+    _canvas->setTextSize(1);
+    std::string mode_display = acOn ? modeName : "OFF";
+    _canvas->drawCenterString(mode_display.c_str(), bubble.x, bubble.y + 34);
 
-void GUI_VideoShit::buttonPressed()
-{
-    _button_state = true;
-    renderPage();
-}
+    /* POWER and MODE buttons, side by side below the bubble */
+    int btn_y = 206;
+    int btn_height = 24;
 
+    _canvas->setTextSize(1);
 
-void GUI_VideoShit::buttonReleased()
-{
-    _button_state = false;
-    renderPage();
+    const char* power_label = acOn ? "ON" : "OFF";
+    int power_text_w = _canvas->textWidth(power_label);
+    int power_text_h = _canvas->fontHeight();
+    int power_btn_width = power_text_w + 30;
+    if (power_btn_width < 60) power_btn_width = 60;
+    int power_btn_x = 78;
+
+    _canvas->fillSmoothRoundRect(power_btn_x - power_btn_width / 2, btn_y - btn_height / 2,
+                                  power_btn_width, btn_height, btn_height / 2, TFT_WHITE);
+    _canvas->setTextColor(_theme_color);
+    _canvas->drawCenterString(power_label, power_btn_x, btn_y - power_text_h / 2);
+
+    const char* mode_label = "MODE";
+    int mode_text_w = _canvas->textWidth(mode_label);
+    int mode_text_h = _canvas->fontHeight();
+    int mode_btn_width = mode_text_w + 30;
+    if (mode_btn_width < 60) mode_btn_width = 60;
+    int mode_btn_x = 162;
+
+    /* Dim the MODE button when powered off, since it's a no-op then */
+    uint32_t mode_btn_color = acOn ? TFT_WHITE : 0x666666U;
+    uint32_t mode_text_color = acOn ? _theme_color : TFT_WHITE;
+
+    _canvas->fillSmoothRoundRect(mode_btn_x - mode_btn_width / 2, btn_y - btn_height / 2,
+                                  mode_btn_width, btn_height, btn_height / 2, mode_btn_color);
+    _canvas->setTextColor(mode_text_color);
+    _canvas->drawCenterString(mode_label, mode_btn_x, btn_y - mode_text_h / 2);
+
+    _draw_quit_button();
+    _canvas->pushSprite(0, 0);
 }
