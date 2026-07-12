@@ -58,7 +58,7 @@ static std::array<uint32_t, ICON_NUM> icon_color_list = {
 };
 /* Icon tag */
 static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
-    "LCD", "TEST",
+    "TV", "CTRL",
     "RTC", "TIME",
     "RFID", "TEST",
     "BRIGHTNESS", "SET",
