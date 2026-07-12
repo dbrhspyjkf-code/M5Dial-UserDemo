@@ -19,6 +19,7 @@
 #include "apps/utilities/ha_client/ha_client.h"
 #include "apps/utilities/rfid_service/rfid_service.h"
 #include "apps/utilities/rfid_service/rfid_service_config.h"
+#include "apps/utilities/idle_screen/idle_screen.h"
 
 #define delay(ms) vTaskDelay(pdMS_TO_TICKS(ms))
 
@@ -83,6 +84,9 @@ extern "C" void app_main(void)
     app_launcher.onCreate();
     while (1)
     {
-        app_launcher.onRunning();
+        if (!IDLE_SCREEN::tick(&hal))
+        {
+            app_launcher.onRunning();
+        }
     }
 }
