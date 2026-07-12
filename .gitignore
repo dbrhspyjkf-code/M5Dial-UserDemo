@@ -5,4 +5,5 @@ managed_components
 # Real secrets - see sonos_config.example.h for the template
 main/apps/app_sonos/sonos_config.h
 main/apps/app_set_brightness/fishtank_config.h
+main/apps/app_lcd_test/tv_config.h
 
