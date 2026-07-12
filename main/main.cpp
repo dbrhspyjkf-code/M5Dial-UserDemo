@@ -15,6 +15,9 @@
 #include "apps/app.h"
 #include "apps/launcher/launcher.h"
 #include "apps/app_factory_test/app_factory_test.h"
+#include "apps/utilities/wifi_connect_wrap/wifi_connect_wrap.h"
+#include "apps/utilities/rfid_service/rfid_service.h"
+#include "apps/utilities/rfid_service/rfid_service_config.h"
 
 #define delay(ms) vTaskDelay(pdMS_TO_TICKS(ms))
 
@@ -27,6 +30,12 @@ extern "C" void app_main(void)
     // HAL::encoder_test(hal);
     // HAL::tp_test(hal);
     // HAL::rtc_test(hal);
+
+    /* Persistent WiFi + always-on RFID service, so every HA app connects
+       instantly and tapping the phone card works regardless of which
+       app (if any) is open */
+    WIFI_CONNECT::connect(RFID_WIFI_SSID, RFID_WIFI_PASSWORD, 8000);
+    RFID_SERVICE::init(&hal);
 
 /* Check factory test mode */
 #ifdef ENABLE_FACTORY_TEST
