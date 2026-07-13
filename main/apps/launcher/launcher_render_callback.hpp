@@ -75,7 +75,7 @@ static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
     image_data_icon_fan,
     image_data_icon_rfid,
     image_data_icon_brigntness,
-    image_data_icon_wifi,
+    image_data_icon_deepseek,
     image_data_icon_email,
     image_data_icon_temp,
     image_data_icon_stock,
