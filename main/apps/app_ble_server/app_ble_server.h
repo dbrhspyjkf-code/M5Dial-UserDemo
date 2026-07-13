@@ -1,17 +1,17 @@
 /**
  * @file app_ble_server.h
- * @author Forairaaaaa
- * @brief 
- * @version 0.1
- * @date 2023-08-07
- * 
- * @copyright Copyright (c) 2023
- * 
+ * @brief Read-only viewer for unread email, fetched once per app open
+ * from the user's email-status-server (part of hermes-mcp-xiaozhi).
+ * Encoder rotates through folders that have unread mail (wraps
+ * around). No writes to any server - this app is display-only.
  */
 #pragma once
 #include "../app.h"
 #include "../../hal/hal.h"
 #include "gui/gui_ble_server.h"
+#include "email_config.h"
+#include "../utilities/email_client/email_client.h"
+#include <vector>
 
 
 namespace MOONCAKE
@@ -20,47 +20,37 @@ namespace MOONCAKE
     {
         namespace BLE_SERVER
         {
+            enum class State { CONNECTING, CONTROLLING, ERROR };
+
             struct Data_t
             {
                 HAL::HAL* hal = nullptr;
 
-                std::string ble_device_name;
-                // BLEServer* pServer = nullptr;
-                // BLEService* pService = nullptr;
-                // BLECharacteristic* pCharacteristic = nullptr;
+                State state = State::CONNECTING;
+                std::string error_message;
 
-                uint32_t ble_page_update_interval = 1000;
-                uint32_t ble_page_update_time_count = 0;
+                std::vector<EMAIL_CLIENT::FolderInfo> folders;
+                int current_index = 0;
             };
         }
 
         class BLE_Server : public APP_BASE
         {
             private:
-                const char* _tag = "BLE_Server";
-                void _ble_init();
+                const char* _tag = "email";
+
+                void _handle_encoder();
+                void _handle_touch();
+                void _render();
+                void _fetch();
 
             public:
                 BLE_SERVER::Data_t _data;
                 GUI_BLE_Server _gui;
 
-
-                /**
-                 * @brief Get gui pointer for basic settings 
-                 * 
-                 * @return GUI_Base* 
-                 */
                 GUI_Base* getGui() override { return &_gui; }
 
-
-                /**
-                 * @brief Lifecycle callbacks for derived to override
-                 * 
-                 */
-                /* Setup App configs, called when App "install()" */
                 void onSetup();
-
-                /* Life cycle */
                 void onCreate();
                 void onRunning();
                 void onDestroy();
@@ -68,4 +58,3 @@ namespace MOONCAKE
 
     }
 }
-

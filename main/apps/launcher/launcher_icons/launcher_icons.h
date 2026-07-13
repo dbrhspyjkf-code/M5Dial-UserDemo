@@ -11,6 +11,7 @@
 #pragma once
 #include "icon_ble.h"
 #include "icon_brigntness.h"
+#include "icon_email.h"
 #include "icon_fan.h"
 #include "icon_lcd.h"
 #include "icon_more.h"

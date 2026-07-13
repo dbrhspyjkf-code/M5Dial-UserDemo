@@ -1,31 +1,13 @@
 /**
  * @file app_ble_server.cpp
- * @author Forairaaaaa
- * @brief https://github.com/espressif/arduino-esp32/blob/esp-idf-v5.2/libraries/BLE/examples/BLE_server/BLE_server.ino
- * @version 0.1
- * @date 2023-08-07
- * 
- * @copyright Copyright (c) 2023
- * 
  */
 #include "app_ble_server.h"
 #include "../common_define.h"
-#include <esp_mac.h>
-#include "../utilities/ble_demo/ble_demo.h"
+#include "../utilities/email_client/email_client.h"
 
 
 using namespace MOONCAKE::USER_APP;
-
-
-
-void BLE_Server::_ble_init()
-{
-    _log("Starting BLE work!");
-
-    /* Start ble demo */
-    ble_demo_start();
-    _log_mem();
-}
+using namespace MOONCAKE::USER_APP::BLE_SERVER;
 
 
 void BLE_Server::onSetup()
@@ -33,7 +15,6 @@ void BLE_Server::onSetup()
     setAppName("BLE_Server");
     setAllowBgRunning(false);
 
-    /* Copy default value */
     BLE_SERVER::Data_t default_data;
     _data = default_data;
 
@@ -41,61 +22,105 @@ void BLE_Server::onSetup()
 }
 
 
-/* Life cycle */
+void BLE_Server::_fetch()
+{
+    _data.folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
+
+    if (_data.folders.empty())
+    {
+        _data.state = State::ERROR;
+        _data.error_message = "No unread mail";
+        return;
+    }
+
+    if (_data.current_index >= (int)_data.folders.size())
+    {
+        _data.current_index = 0;
+    }
+    _data.state = State::CONTROLLING;
+}
+
+
 void BLE_Server::onCreate()
 {
     _log("onCreate");
-    _ble_init();
+
+    _data.state = State::CONNECTING;
+    _render();
+
+    _fetch();
+    _render();
+}
+
+
+void BLE_Server::_handle_encoder()
+{
+    if (_data.state != State::CONTROLLING)
+        return;
+
+    if (!_data.hal->encoder.wasMoved(true))
+        return;
+
+    int direction = (_data.hal->encoder.getDirection() < 1) ? 1 : -1;
+    int count = (int)_data.folders.size();
+
+    _data.current_index = (_data.current_index + direction + count) % count;
+
+    _render();
+}
+
+
+void BLE_Server::_handle_touch()
+{
+    if (!_data.hal->tp.isTouched())
+        return;
+
+    if (_data.state == State::ERROR)
+    {
+        _data.state = State::CONNECTING;
+        _render();
+        _fetch();
+        _render();
+    }
+
+    while (_data.hal->tp.isTouched())
+    {
+        _data.hal->tp.update();
+        delay(5);
+    }
+}
+
+
+void BLE_Server::_render()
+{
+    if (_data.state == State::CONNECTING)
+    {
+        _gui.renderStatus("Loading...", "");
+    }
+    else if (_data.state == State::ERROR)
+    {
+        _gui.renderStatus(_data.error_message, "TAP TO RETRY");
+    }
+    else
+    {
+        const EMAIL_CLIENT::FolderInfo& folder = _data.folders[_data.current_index];
+        _gui.renderPage(folder.name, folder.unread, folder.latest_from, folder.latest_subject,
+                         _data.current_index, (int)_data.folders.size());
+    }
 }
 
 
 void BLE_Server::onRunning()
 {
-    if ((millis() - _data.ble_page_update_time_count) > _data.ble_page_update_interval)
-    {
+    _handle_encoder();
+    _handle_touch();
 
-        // printf("%s %d %d %d\n",
-        //     ble_demo_get_infos()->device_name,
-        //     *(ble_demo_get_infos()->sending_data),
-        //     *(ble_demo_get_infos()->is_connected),
-        //     *(ble_demo_get_infos()->is_subscribed)
-        // );
-
-
-        char info[48];
-
-        if (*(ble_demo_get_infos()->is_subscribed))
-        {
-            snprintf(info, 48, "send %d", *(ble_demo_get_infos()->sending_data));
-        }
-        else 
-        {
-            snprintf(info, 48, "no subscribe");
-        }
-
-
-
-        /* Update page */
-        _gui.renderPage(
-            (GUI_BLE_Server::BLEStatus_t)*(ble_demo_get_infos()->is_connected),
-            ble_demo_get_infos()->device_name,
-            info
-        );
-
-
-        /* Reset */
-        _data.ble_page_update_time_count = millis();
-    }
-
-
-    /* If button pressed */
+    /* If button pressed: quit, unconditionally (same convention as every other app) */
     if (!_data.hal->encoder.btn.read())
     {
-        /* Hold until button release */
         while (!_data.hal->encoder.btn.read())
             delay(5);
 
-        /* Bye */
         destroyApp();
     }
 }
@@ -105,6 +130,7 @@ void BLE_Server::onDestroy()
 {
     _log("onDestroy");
 
-    /* Close ble demo */
-    ble_demo_stop();
+    /* Shared canvas: leave text size back at the default so the launcher's
+       tag rendering isn't left using whatever size this app last drew with. */
+    _data.hal->canvas->setTextSize(1);
 }
