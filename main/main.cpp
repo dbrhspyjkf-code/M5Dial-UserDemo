@@ -20,6 +20,7 @@
 #include "apps/utilities/rfid_service/rfid_service.h"
 #include "apps/utilities/rfid_service/rfid_service_config.h"
 #include "apps/utilities/idle_screen/idle_screen.h"
+#include "apps/utilities/ntp_sync/ntp_sync.h"
 
 #define delay(ms) vTaskDelay(pdMS_TO_TICKS(ms))
 
@@ -37,6 +38,7 @@ extern "C" void app_main(void)
        instantly and tapping the phone card works regardless of which
        app (if any) is open */
     WIFI_CONNECT::connect(RFID_WIFI_SSID, RFID_WIFI_PASSWORD, 8000);
+    NTP_SYNC::sync_rtc_time(&hal, 8000);
     HA_CLIENT::init();
     RFID_SERVICE::init(&hal);
 
