@@ -228,29 +228,43 @@ void Launcher::_screensaver_render()
        carousel's own tag rendering. */
     if (_data.weather_ok)
     {
-        char temp_str[16];
-        snprintf(temp_str, sizeof(temp_str), "%s%cC", _data.weather_temp_c.c_str(), 176 /* degree symbol */);
+        /* Font0 (this project's default bitmap font) is ASCII-only and
+           has no glyph for the degree symbol (0xB0) - it rendered as a
+           missing-glyph box. Draw the degree mark as a small circle
+           instead of relying on any font's glyph coverage. */
+        const std::string& temp_only = _data.weather_temp_c;
+        const int degree_gap = 6;
+        const int degree_r = 3;
+        const int degree_slot_w = degree_gap + degree_r * 2 + 2; /* +2 gap before "C" */
 
         _data.hal->canvas->setFont(&fonts::Font0);
         _data.hal->canvas->setTextSize(2);
-        int temp_w = _data.hal->canvas->textWidth(temp_str);
+        int temp_only_w = _data.hal->canvas->textWidth(temp_only.c_str());
+        int c_w = _data.hal->canvas->textWidth("C");
+        int temp_total_w = temp_only_w + degree_slot_w + c_w;
 
         _data.hal->canvas->setFont(&fonts::efontCN_16_b);
         _data.hal->canvas->setTextSize(1);
         int gap = 8;
         int cond_w = _data.hal->canvas->textWidth(_data.weather_condition.c_str());
 
-        int start_x = 120 - (temp_w + gap + cond_w) / 2;
+        int start_x = 120 - (temp_total_w + gap + cond_w) / 2;
 
         _data.hal->canvas->setFont(&fonts::Font0);
         _data.hal->canvas->setTextSize(2);
         _data.hal->canvas->setTextColor(TFT_WHITE);
-        _data.hal->canvas->drawString(temp_str, start_x, 152);
+        _data.hal->canvas->drawString(temp_only.c_str(), start_x, 152);
+
+        int degree_cx = start_x + temp_only_w + degree_gap + degree_r;
+        int degree_cy = 152 + degree_r + 1;
+        _data.hal->canvas->drawCircle(degree_cx, degree_cy, degree_r, TFT_WHITE);
+
+        _data.hal->canvas->drawString("C", start_x + temp_only_w + degree_slot_w, 152);
 
         _data.hal->canvas->setFont(&fonts::efontCN_16_b);
         _data.hal->canvas->setTextSize(1);
         _data.hal->canvas->setTextColor(TFT_WHITE);
-        _data.hal->canvas->drawString(_data.weather_condition.c_str(), start_x + temp_w + gap, 153);
+        _data.hal->canvas->drawString(_data.weather_condition.c_str(), start_x + temp_total_w + gap, 153);
 
         _data.hal->canvas->setFont(&fonts::Font0);
     }
