@@ -11,6 +11,8 @@
 #include "launcher.h"
 #include "../common_define.h"
 #include "../utilities/idle_screen/idle_screen.h"
+#include "../utilities/weather_client/weather_client.h"
+#include <ctime>
 
 
 using namespace MOONCAKE::USER_APP;
@@ -171,6 +173,129 @@ void Launcher::_launcher_loop()
                 _canvas_update();
             }
         }
+    }
+}
+
+
+void Launcher::_fetch_weather()
+{
+    WEATHER_CLIENT::WeatherInfo info = WEATHER_CLIENT::get_weather(WEATHER_API_BASE_URL);
+    _data.weather_ok = info.ok;
+    _data.weather_temp_c = info.temp_c;
+    _data.weather_condition = info.condition;
+}
+
+
+void Launcher::_screensaver_render()
+{
+    struct tm time_now;
+    _data.hal->rtc.getTime(time_now);
+
+    char time_buf[8];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d", time_now.tm_hour, time_now.tm_min);
+
+    static const char* WEEKDAY_NAMES[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+    char date_buf[32];
+    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d %s",
+             time_now.tm_year, time_now.tm_mon + 1, time_now.tm_mday,
+             WEEKDAY_NAMES[time_now.tm_wday % 7]);
+
+    _data.hal->canvas->fillScreen(TFT_BLACK);
+
+    _data.hal->canvas->setTextColor(TFT_WHITE);
+    _data.hal->canvas->setTextSize(4);
+    int time_h = _data.hal->canvas->fontHeight();
+    _data.hal->canvas->drawCenterString(time_buf, 120, 90 - time_h / 2);
+
+    _data.hal->canvas->setTextSize(1);
+    _data.hal->canvas->drawCenterString(date_buf, 120, 130);
+
+    char weather_buf[32];
+    if (_data.weather_ok)
+    {
+        snprintf(weather_buf, sizeof(weather_buf), "%s%cC %s",
+                 _data.weather_temp_c.c_str(), 176 /* degree symbol */, _data.weather_condition.c_str());
+    }
+    else
+    {
+        snprintf(weather_buf, sizeof(weather_buf), "--");
+    }
+    _data.hal->canvas->drawCenterString(weather_buf, 120, 155);
+
+    _data.hal->canvas->pushSprite(0, 0);
+}
+
+
+void Launcher::_screensaver_tick()
+{
+    if (!_data.screensaver_initialized)
+    {
+        _data.screensaver_last_activity_ms = millis();
+        _data.screensaver_last_encoder_count = _data.hal->encoder.getCount();
+        _data.screensaver_initialized = true;
+    }
+
+    bool touched = _data.hal->tp.isTouched();
+
+    /* Read the raw count directly (no side effects) instead of
+       wasMoved(), which the carousel's own scroll logic already
+       consumes in _launcher_loop() - calling it here too would eat
+       rotation before the carousel sees it. */
+    int64_t current_count = _data.hal->encoder.getCount();
+    bool encoder_moved = (current_count != _data.screensaver_last_encoder_count);
+    _data.screensaver_last_encoder_count = current_count;
+
+    bool button_pressed = !_data.hal->encoder.btn.read();
+
+    bool activity = touched || encoder_moved || button_pressed;
+
+    if (_data.screensaver_on)
+    {
+        if (activity)
+        {
+            /* Absorb the gesture that dismissed the screensaver, same
+               "wake, don't act" convention as IDLE_SCREEN, so it can't
+               also select whatever icon is under the touch. */
+            if (touched)
+            {
+                while (_data.hal->tp.isTouched())
+                {
+                    _data.hal->tp.update();
+                    delay(5);
+                }
+            }
+            if (button_pressed)
+            {
+                while (!_data.hal->encoder.btn.read())
+                    delay(5);
+            }
+
+            _data.screensaver_on = false;
+            _data.screensaver_last_activity_ms = millis();
+            return;
+        }
+
+        /* Refresh the displayed clock once a second while idle */
+        if (millis() - _data.screensaver_last_render_ms >= 1000)
+        {
+            _screensaver_render();
+            _data.screensaver_last_render_ms = millis();
+        }
+        return;
+    }
+
+    if (activity)
+    {
+        _data.screensaver_last_activity_ms = millis();
+        return;
+    }
+
+    if (millis() - _data.screensaver_last_activity_ms > 30000)
+    {
+        _data.screensaver_on = true;
+        _fetch_weather();
+        _screensaver_render();
+        _data.screensaver_last_render_ms = millis();
     }
 }
 
@@ -405,6 +530,10 @@ void Launcher::onCreate()
 
 void Launcher::onRunning()
 {
-    _launcher_loop();
+    _screensaver_tick();
+    if (!_data.screensaver_on)
+    {
+        _launcher_loop();
+    }
 }
 

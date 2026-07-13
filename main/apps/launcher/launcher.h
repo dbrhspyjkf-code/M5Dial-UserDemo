@@ -14,6 +14,7 @@
 #include "../utilities/smooth_menu/src/simple_menu/simple_menu.h"
 #include "launcher_render_callback.hpp"
 #include "../utilities/gui_base/gui_base.h"
+#include "screensaver_config.h"
 
 #include "../app_lcd_test/app_lcd_test.h"
 #include "../app_temp_demo/app_temp_demo.h"
@@ -39,6 +40,16 @@ namespace MOONCAKE
                 HAL::HAL* hal = nullptr;
                 SMOOTH_MENU::Simple_Menu* menu;
                 LauncherRender_CB_t* menu_render_cb;
+
+                bool screensaver_on = false;
+                bool screensaver_initialized = false;
+                uint32_t screensaver_last_activity_ms = 0;
+                uint32_t screensaver_last_render_ms = 0;
+                int64_t screensaver_last_encoder_count = 0;
+
+                bool weather_ok = false;
+                std::string weather_temp_c;
+                std::string weather_condition;
             };
         }
 
@@ -54,6 +65,10 @@ namespace MOONCAKE
                 void _launcher_loop();
                 void _app_open_callback(uint8_t selectedNum);
                 void _simple_app_manager(MOONCAKE::APP_BASE* app);
+
+                void _screensaver_tick();
+                void _screensaver_render();
+                void _fetch_weather();
 
             public:
                 Launcher() = default;
