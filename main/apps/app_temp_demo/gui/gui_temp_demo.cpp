@@ -40,7 +40,7 @@ void GUI_VideoShit::renderPage(bool acOn, float targetTemp, const std::string& m
 
     char string_buffer[24];
     snprintf(string_buffer, sizeof(string_buffer), "%.1f%cC", targetTemp, 176 /* degree symbol, ASCII 0xB0 */);
-    _canvas->setTextSize(3);
+    _canvas->setTextSize(2);
     int temp_h = _canvas->fontHeight();
     _canvas->drawCenterString(string_buffer, 120, 120 - temp_h / 2);
 
