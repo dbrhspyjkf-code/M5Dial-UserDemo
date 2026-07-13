@@ -203,7 +203,7 @@ void Launcher::_screensaver_render()
     _data.hal->canvas->fillScreen(TFT_BLACK);
 
     _data.hal->canvas->setTextColor(TFT_WHITE);
-    _data.hal->canvas->setTextSize(4);
+    _data.hal->canvas->setTextSize(3);
     int time_h = _data.hal->canvas->fontHeight();
     _data.hal->canvas->drawCenterString(time_buf, 120, 90 - time_h / 2);
 
@@ -220,7 +220,15 @@ void Launcher::_screensaver_render()
     {
         snprintf(weather_buf, sizeof(weather_buf), "--");
     }
+    /* Condition text is Chinese - the default font here is LGFX's
+       ASCII-only bitmap font, which falls back to an oversized glyph
+       for characters it doesn't have. Use the CJK-capable font (same
+       "small" one Sonos uses for the artist name) just for this
+       string, then reset back to the default font afterward so it
+       doesn't leak into the carousel's own tag rendering. */
+    _data.hal->canvas->setFont(GUI_FONT_CN_SMALL);
     _data.hal->canvas->drawCenterString(weather_buf, 120, 155);
+    _data.hal->canvas->setFont(&fonts::Font0);
 
     _data.hal->canvas->pushSprite(0, 0);
 }
