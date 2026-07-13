@@ -62,7 +62,7 @@ static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
     "FAN", "CTRL",
     "RFID", "TEST",
     "BRIGHTNESS", "SET",
-    "WIFI", "SCAN",
+    "DEEPSEEK", "BAL",
     "EMAIL", "",
     "AC", "CTRL",
     "STOCK", "WATCH",
