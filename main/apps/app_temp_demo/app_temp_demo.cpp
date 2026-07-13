@@ -130,7 +130,7 @@ void VideoShit::_handle_touch()
         _render();
         onCreate();
     }
-    else if (_data.state == State::CONTROLLING && y >= 189 && y <= 223)
+    else if (_data.state == State::CONTROLLING && y >= 182 && y <= 206)
     {
         if (x >= 45 && x <= 118)
         {
