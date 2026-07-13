@@ -55,7 +55,7 @@ void GUI_SetBrightness::renderPage(bool brightnessMode, int brightnessPct,
     else
     {
         std::string display_effect = effectName;
-        _canvas->setFont(&fonts::efontCN_16_b);
+        _canvas->setFont(GUI_FONT_CN_BIG);
         _canvas->setTextSize(1);
         while (_canvas->textWidth(display_effect.c_str()) > 200 && display_effect.size() > 3)
         {
