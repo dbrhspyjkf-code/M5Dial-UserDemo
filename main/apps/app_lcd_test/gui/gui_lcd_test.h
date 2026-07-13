@@ -19,10 +19,12 @@ class GUI_LCD_TEST : public GUI_Base
         void renderStatus(const std::string& line1, const std::string& line2);
 
         /**
-         * @brief Render the normal control screen
-         *
-         * @param volumePct 0-100, already normalized from the entity's actual min/max range
-         * @param tvOn true if the TV is on (already inverted from the underlying switch)
+         * @brief Render the volume/power page
          */
-        void renderPage(int volumePct, bool tvOn);
+        void renderVolumePage(int volumePct, bool tvOn);
+
+        /**
+         * @brief Render the D-pad navigation page
+         */
+        void renderNavPage();
 };

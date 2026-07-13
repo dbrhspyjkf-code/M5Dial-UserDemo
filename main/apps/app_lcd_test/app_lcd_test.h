@@ -1,11 +1,14 @@
 /**
  * @file app_lcd_test.h
- * @brief Controls a TV's power and volume through Home Assistant's REST
- * API. Power is inverted through a "sound bar mode" switch (ON = TV
- * off) - this file is the only place that inversion is visible; the
- * GUI and touch handling only ever deal with the TV's actual on/off
- * state. Touch: on/off toggle. Encoder: debounced volume. Encoder
- * button: quit (project-wide convention).
+ * @brief Controls a TV's power, volume, and navigation (D-pad) through
+ * Home Assistant's REST API. Power is inverted through a "sound bar
+ * mode" switch (ON = TV off) - this file is the only place that
+ * inversion is visible; the GUI and touch handling only ever deal with
+ * the TV's actual on/off state. Two pages, toggled by touch: VOLUME
+ * (power/volume) and NAV (up/down/left/right/ok/back/menu, all
+ * momentary button-domain presses with nothing to read back). Encoder:
+ * debounced volume, VOLUME page only. Encoder button: quit
+ * (project-wide convention).
  */
 #pragma once
 #include "../app.h"
@@ -21,6 +24,7 @@ namespace MOONCAKE
         namespace LCD_TEST
         {
             enum class State { CONNECTING, CONTROLLING, ERROR };
+            enum class Page { VOLUME, NAV };
 
             struct Data_t
             {
@@ -28,6 +32,7 @@ namespace MOONCAKE
 
                 State state = State::CONNECTING;
                 std::string error_message;
+                Page page = Page::VOLUME;
 
                 bool tv_on = true;
                 float volume = 50.0f;
@@ -46,6 +51,8 @@ namespace MOONCAKE
 
                 void _handle_encoder();
                 void _handle_touch();
+                void _handle_touch_volume_page(int x, int y);
+                void _handle_touch_nav_page(int x, int y);
                 void _handle_volume_debounce();
                 void _render();
                 void _refresh_state();
