@@ -41,13 +41,14 @@ void GUI_LCD_TEST::renderVolumePage(int volumePct, bool tvOn)
     char string_buffer[24];
     snprintf(string_buffer, sizeof(string_buffer), "%d%%", volumePct);
     _canvas->setTextSize(3);
-    _canvas->drawCenterString(string_buffer, 120, 100);
+    int volume_h = _canvas->fontHeight();
+    _canvas->drawCenterString(string_buffer, 120, 120 - volume_h / 2);
 
     _canvas->setTextSize(1);
     _canvas->drawCenterString("TV", 120, 148);
 
     /* MODE and POWER buttons, side by side */
-    int btn_y = 206;
+    int btn_y = 194;
     int btn_height = 24;
 
     _canvas->setTextSize(1);
@@ -87,29 +88,26 @@ void GUI_LCD_TEST::renderNavPage()
 
     _draw_top_icon();
 
-    _canvas->setTextColor(TFT_WHITE);
-    _canvas->setTextSize(1);
-    _canvas->drawCenterString("NAV", 120, 50);
-
-    /* D-pad cross, centered around (120, 110) */
-    auto draw_dpad_button = [this](const char* label, int x, int y, int w, int h)
+    /* D-pad cross, centered around (120, 112) */
+    auto draw_dpad_button = [this](const char* label, int x, int y, int w, int h, int textSize)
     {
         _canvas->fillSmoothRoundRect(x - w / 2, y - h / 2, w, h, 8, TFT_WHITE);
         _canvas->setTextColor(_theme_color);
+        _canvas->setTextSize(textSize);
         int text_h = _canvas->fontHeight();
         _canvas->drawCenterString(label, x, y - text_h / 2);
     };
 
-    draw_dpad_button("^", 120, 84, 34, 24);
-    draw_dpad_button("v", 120, 136, 34, 24);
-    draw_dpad_button("<", 84, 110, 32, 24);
-    draw_dpad_button(">", 156, 110, 32, 24);
-    draw_dpad_button("OK", 120, 110, 34, 24);
+    draw_dpad_button("^", 120, 74, 38, 32, 2);
+    draw_dpad_button("v", 120, 150, 38, 32, 2);
+    draw_dpad_button("<", 60, 112, 38, 32, 2);
+    draw_dpad_button(">", 180, 112, 38, 32, 2);
+    draw_dpad_button("OK", 120, 112, 38, 32, 1);
 
     /* BACK / MENU / VOL row */
-    draw_dpad_button("BACK", 56, 193, 52, 24);
-    draw_dpad_button("MENU", 120, 193, 52, 24);
-    draw_dpad_button("VOL", 184, 193, 52, 24);
+    draw_dpad_button("BACK", 48, 192, 64, 28, 1);
+    draw_dpad_button("MENU", 120, 192, 64, 28, 1);
+    draw_dpad_button("VOL", 192, 192, 64, 28, 1);
 
     _draw_quit_button();
     _canvas->pushSprite(0, 0);

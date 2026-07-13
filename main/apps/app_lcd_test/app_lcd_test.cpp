@@ -126,7 +126,7 @@ void LCD_Test::_handle_volume_debounce()
 
 void LCD_Test::_handle_touch_volume_page(int x, int y)
 {
-    if (y < 189 || y > 223)
+    if (y < 182 || y > 206)
         return;
 
     if (x >= 30 && x <= 118)
@@ -151,36 +151,36 @@ void LCD_Test::_handle_touch_volume_page(int x, int y)
 
 void LCD_Test::_handle_touch_nav_page(int x, int y)
 {
-    /* D-pad cross, centered around (120, 110) */
-    if (x >= 103 && x <= 137 && y >= 72 && y <= 96)
+    /* D-pad cross, centered around (120, 112) */
+    if (x >= 101 && x <= 139 && y >= 58 && y <= 90)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_UP_ENTITY_ID);
     }
-    else if (x >= 103 && x <= 137 && y >= 124 && y <= 148)
+    else if (x >= 101 && x <= 139 && y >= 134 && y <= 166)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_DOWN_ENTITY_ID);
     }
-    else if (x >= 68 && x <= 100 && y >= 98 && y <= 122)
+    else if (x >= 41 && x <= 79 && y >= 96 && y <= 128)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_LEFT_ENTITY_ID);
     }
-    else if (x >= 140 && x <= 172 && y >= 98 && y <= 122)
+    else if (x >= 161 && x <= 199 && y >= 96 && y <= 128)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_RIGHT_ENTITY_ID);
     }
-    else if (x >= 103 && x <= 137 && y >= 98 && y <= 122)
+    else if (x >= 101 && x <= 139 && y >= 96 && y <= 128)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_OK_ENTITY_ID);
     }
-    else if (x >= 30 && x <= 82 && y >= 181 && y <= 205)
+    else if (x >= 16 && x <= 80 && y >= 178 && y <= 206)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_BACK_ENTITY_ID);
     }
-    else if (x >= 94 && x <= 146 && y >= 181 && y <= 205)
+    else if (x >= 88 && x <= 152 && y >= 178 && y <= 206)
     {
         HA_CLIENT::call_service(TV_HA_BASE_URL, TV_HA_TOKEN, "button", "press", TV_NAV_MENU_ENTITY_ID);
     }
-    else if (x >= 158 && x <= 210 && y >= 181 && y <= 205)
+    else if (x >= 160 && x <= 224 && y >= 178 && y <= 206)
     {
         /* VOL button - switch back to VOLUME page */
         _data.page = Page::VOLUME;
