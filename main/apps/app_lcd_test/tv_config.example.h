@@ -11,3 +11,11 @@
 #define TV_HA_TOKEN           "YOUR_LONG_LIVED_ACCESS_TOKEN"
 #define TV_SWITCH_ENTITY_ID   "switch.your_entity"
 #define TV_VOLUME_ENTITY_ID   "number.your_entity"
+
+#define TV_NAV_UP_ENTITY_ID     "button.your_tv_press_up"
+#define TV_NAV_DOWN_ENTITY_ID   "button.your_tv_press_down"
+#define TV_NAV_LEFT_ENTITY_ID   "button.your_tv_press_left"
+#define TV_NAV_RIGHT_ENTITY_ID  "button.your_tv_press_right"
+#define TV_NAV_OK_ENTITY_ID     "button.your_tv_press_ok"
+#define TV_NAV_BACK_ENTITY_ID   "button.your_tv_press_back"
+#define TV_NAV_MENU_ENTITY_ID   "button.your_tv_press_menu"
