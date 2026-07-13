@@ -202,33 +202,64 @@ void Launcher::_screensaver_render()
 
     _data.hal->canvas->fillScreen(TFT_BLACK);
 
+    /* Whichever app was last open (Sonos, Timer, etc.) may have left a
+       large CJK font set on this shared canvas and never reset it (only
+       textSize gets reset in each app's onDestroy(), not font) - explicitly
+       set the default font here instead of relying on inherited state, or
+       the very first screensaver render after closing such an app comes
+       out oversized until this function's own later setFont() calls
+       incidentally correct it on the next second's refresh. */
+    _data.hal->canvas->setFont(&fonts::Font0);
     _data.hal->canvas->setTextColor(TFT_WHITE);
-    _data.hal->canvas->setTextSize(3);
+    _data.hal->canvas->setTextSize(4);
     int time_h = _data.hal->canvas->fontHeight();
-    _data.hal->canvas->drawCenterString(time_buf, 120, 90 - time_h / 2);
+    _data.hal->canvas->drawCenterString(time_buf, 120, 72 - time_h / 2);
 
-    _data.hal->canvas->setTextSize(1);
-    _data.hal->canvas->drawCenterString(date_buf, 120, 130);
+    _data.hal->canvas->setTextSize(2);
+    _data.hal->canvas->drawCenterString(date_buf, 120, 120);
 
-    char weather_buf[32];
+    /* Temp (ASCII) and condition (Chinese) are drawn as two separate
+       strings sized to visually match, then centered as a pair -
+       drawing them as one mixed string left the ASCII digits looking
+       smaller than the CJK glyphs even at the same nominal font size,
+       since this bitmap CJK font's Latin/digit glyphs don't fill the
+       same visual weight as its full-width Chinese characters. Reset
+       back to the default font afterward so it doesn't leak into the
+       carousel's own tag rendering. */
     if (_data.weather_ok)
     {
-        snprintf(weather_buf, sizeof(weather_buf), "%s%cC %s",
-                 _data.weather_temp_c.c_str(), 176 /* degree symbol */, _data.weather_condition.c_str());
+        char temp_str[16];
+        snprintf(temp_str, sizeof(temp_str), "%s%cC", _data.weather_temp_c.c_str(), 176 /* degree symbol */);
+
+        _data.hal->canvas->setFont(&fonts::Font0);
+        _data.hal->canvas->setTextSize(2);
+        int temp_w = _data.hal->canvas->textWidth(temp_str);
+
+        _data.hal->canvas->setFont(&fonts::efontCN_16_b);
+        _data.hal->canvas->setTextSize(1);
+        int gap = 8;
+        int cond_w = _data.hal->canvas->textWidth(_data.weather_condition.c_str());
+
+        int start_x = 120 - (temp_w + gap + cond_w) / 2;
+
+        _data.hal->canvas->setFont(&fonts::Font0);
+        _data.hal->canvas->setTextSize(2);
+        _data.hal->canvas->setTextColor(TFT_WHITE);
+        _data.hal->canvas->drawString(temp_str, start_x, 152);
+
+        _data.hal->canvas->setFont(&fonts::efontCN_16_b);
+        _data.hal->canvas->setTextSize(1);
+        _data.hal->canvas->setTextColor(TFT_WHITE);
+        _data.hal->canvas->drawString(_data.weather_condition.c_str(), start_x + temp_w + gap, 153);
+
+        _data.hal->canvas->setFont(&fonts::Font0);
     }
     else
     {
-        snprintf(weather_buf, sizeof(weather_buf), "--");
+        _data.hal->canvas->setFont(&fonts::Font0);
+        _data.hal->canvas->setTextSize(2);
+        _data.hal->canvas->drawCenterString("--", 120, 152);
     }
-    /* Condition text is Chinese - the default font here is LGFX's
-       ASCII-only bitmap font, which falls back to an oversized glyph
-       for characters it doesn't have. Use the CJK-capable font (same
-       "small" one Sonos uses for the artist name) just for this
-       string, then reset back to the default font afterward so it
-       doesn't leak into the carousel's own tag rendering. */
-    _data.hal->canvas->setFont(GUI_FONT_CN_SMALL);
-    _data.hal->canvas->drawCenterString(weather_buf, 120, 155);
-    _data.hal->canvas->setFont(&fonts::Font0);
 
     _data.hal->canvas->pushSprite(0, 0);
 }
