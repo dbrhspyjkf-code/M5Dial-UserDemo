@@ -22,16 +22,23 @@ namespace NTP_SYNC
         esp_sntp_setservername(0, "ntp.aliyun.com");
         esp_sntp_init();
 
+        /* SNTP_SYNC_STATUS_COMPLETED is transient - the library resets
+           it back to SNTP_SYNC_STATUS_RESET shortly after it's first
+           observed, so the status must be captured at the exact check
+           that breaks this loop, never re-queried afterward (a second
+           query would very likely see it already reset and wrongly
+           report failure even though the sync succeeded). */
         uint32_t waited_ms = 0;
-        while (esp_sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && waited_ms < timeout_ms)
+        sntp_sync_status_t status;
+        while ((status = esp_sntp_get_sync_status()) != SNTP_SYNC_STATUS_COMPLETED && waited_ms < timeout_ms)
         {
             vTaskDelay(pdMS_TO_TICKS(200));
             waited_ms += 200;
         }
 
-        if (esp_sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
+        if (status != SNTP_SYNC_STATUS_COMPLETED)
         {
-            ESP_LOGW(TAG, "NTP sync timed out after %u ms, RTC left unchanged", (unsigned)timeout_ms);
+            ESP_LOGW(TAG, "NTP sync timed out after %u ms, RTC left unchanged", (unsigned)waited_ms);
             return;
         }
 
