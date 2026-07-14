@@ -113,12 +113,6 @@ namespace STOCK_CLIENT
                 cJSON* pchg = cJSON_GetObjectItem(item, "pchg");
                 if (cJSON_IsNumber(pchg)) stock.abs_chg = (float)pchg->valuedouble;
 
-                cJSON* one_sentence = cJSON_GetObjectItem(item, "one_sentence");
-                if (cJSON_IsString(one_sentence)) stock.one_sentence = one_sentence->valuestring;
-
-                cJSON* analysis_summary = cJSON_GetObjectItem(item, "analysis_summary");
-                if (cJSON_IsString(analysis_summary)) stock.analysis_summary = analysis_summary->valuestring;
-
                 result.push_back(stock);
             }
         }
