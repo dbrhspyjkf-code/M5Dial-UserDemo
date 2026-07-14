@@ -26,6 +26,19 @@ namespace IDLE_SCREEN
         }
 
         bool touched = hal->tp.isTouched();
+        if (touched)
+        {
+            /* TP_FT3267::isTouched() is a bare I2C register read with no
+               error checking - an occasional bus glitch can report a
+               phantom touch for a single poll, and tick() is polled at
+               very high frequency while idle. A real finger touch holds
+               for far longer than one poll, so require it to still read
+               true after a short delay before trusting it (same fix
+               applied to the launcher's screensaver after a phantom
+               touch was observed live waking it after only ~31s idle). */
+            delay(20);
+            touched = hal->tp.isTouched();
+        }
 
         /* Read the raw count directly (no side effects) instead of
            wasMoved(), which mutates its own internal _last_count and

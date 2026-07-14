@@ -295,6 +295,20 @@ void Launcher::_screensaver_tick()
     }
 
     bool touched = _data.hal->tp.isTouched();
+    if (touched)
+    {
+        /* TP_FT3267::isTouched() is a bare I2C register read with no
+           error checking (hal_tp.hpp) - an occasional bus glitch can
+           report a phantom touch for a single poll, and this function
+           gets polled at very high frequency while idle. A real finger
+           touch holds for far longer than one poll, so require it to
+           still read true after a short delay before trusting it,
+           instead of waking/dismissing the screensaver on one noisy
+           read (this was observed live: screensaver dismissed after
+           only ~31s idle with nobody touching the device). */
+        delay(20);
+        touched = _data.hal->tp.isTouched();
+    }
 
     /* Read the raw count directly (no side effects) instead of
        wasMoved(), which the carousel's own scroll logic already
