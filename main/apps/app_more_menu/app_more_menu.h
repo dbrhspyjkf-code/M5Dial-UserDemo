@@ -2,8 +2,10 @@
  * @file app_more_menu.h
  * @brief Read-only viewer for the user's stock watchlist, fetched
  * once per app open from the hermes-mcp-xiaozhi stock API. Encoder
- * rotates through the list (wraps around). No writes to any server -
- * this app is display-only.
+ * rotates through the list (wraps around). Tapping the screen toggles
+ * to that stock's analysis summary (already included in the fetched
+ * data, no extra request) and tapping again returns to the list.
+ * No writes to any server - this app is display-only.
  */
 #pragma once
 #include "../app.h"
@@ -31,6 +33,7 @@ namespace MOONCAKE
 
                 std::vector<STOCK_CLIENT::StockItem> stocks;
                 int current_index = 0;
+                bool showing_analysis = false;
             };
         } // namespace MORE_MENU
 

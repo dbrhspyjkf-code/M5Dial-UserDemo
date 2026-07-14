@@ -55,7 +55,7 @@ void MoreMenu::onCreate()
 
 void MoreMenu::_handle_encoder()
 {
-    if (_data.state != State::CONTROLLING)
+    if (_data.state != State::CONTROLLING || _data.showing_analysis)
         return;
 
     if (!_data.hal->encoder.wasMoved(true))
@@ -82,6 +82,11 @@ void MoreMenu::_handle_touch()
         _fetch();
         _render();
     }
+    else if (_data.state == State::CONTROLLING)
+    {
+        _data.showing_analysis = !_data.showing_analysis;
+        _render();
+    }
 
     while (_data.hal->tp.isTouched())
     {
@@ -105,8 +110,17 @@ void MoreMenu::_render()
     {
         const STOCK_CLIENT::StockItem& stock = _data.stocks[_data.current_index];
         std::string display_name = stock.name.empty() ? stock.code : stock.name;
-        _gui.renderPage(display_name, stock.price, stock.abs_chg, stock.chg,
-                         _data.current_index, (int)_data.stocks.size());
+
+        if (_data.showing_analysis)
+        {
+            _gui.renderAnalysis(display_name, stock.one_sentence, stock.analysis_summary,
+                                 _data.current_index, (int)_data.stocks.size());
+        }
+        else
+        {
+            _gui.renderPage(display_name, stock.price, stock.abs_chg, stock.chg,
+                             _data.current_index, (int)_data.stocks.size());
+        }
     }
 }
 
