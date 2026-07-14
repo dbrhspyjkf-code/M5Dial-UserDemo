@@ -58,16 +58,16 @@ static std::array<uint32_t, ICON_NUM> icon_color_list = {
 };
 /* Icon tag */
 static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
-    "TV", "CTRL",
-    "FAN", "CTRL",
-    "RFID", "TEST",
-    "BRIGHTNESS", "SET",
-    "DEEPSEEK", "BAL",
+    "TV", "",
+    "FAN", "",
+    "RFID", "READER",
+    "BRIGHTNESS", "",
+    "DEEPSEEK", "",
     "EMAIL", "",
-    "AC", "CTRL",
-    "STOCK", "WATCH",
-    "TIMER", "SET",
-    "SONOS", "CTRL"
+    "AC", "",
+    "STOCK", "",
+    "TIMER", "",
+    "SONOS", ""
 };
 /* Icon pic */
 static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
