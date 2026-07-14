@@ -38,8 +38,8 @@ void GUI_WiFi_Scan::renderPage(const std::string& totalBalance, const std::strin
 
     _canvas->setFont(&fonts::Font0);
     _canvas->setTextColor(TFT_WHITE);
-    _canvas->setTextSize(1);
-    _canvas->drawCenterString("DEEPSEEK", 120, 55);
+    _canvas->setTextSize(2);
+    _canvas->drawCenterString("DEEPSEEK", 120, 52);
 
     char total_buf[32];
     snprintf(total_buf, sizeof(total_buf), "%s %s", totalBalance.c_str(), currency.c_str());
@@ -47,11 +47,14 @@ void GUI_WiFi_Scan::renderPage(const std::string& totalBalance, const std::strin
     int total_h = _canvas->fontHeight();
     _canvas->drawCenterString(total_buf, 120, 120 - total_h / 2);
 
-    char detail_buf[48];
-    snprintf(detail_buf, sizeof(detail_buf), "topup %s  free %s",
-             toppedUpBalance.c_str(), grantedBalance.c_str());
-    _canvas->setTextSize(1);
-    _canvas->drawCenterString(detail_buf, 120, 160);
+    char topup_buf[24];
+    snprintf(topup_buf, sizeof(topup_buf), "topup %s", toppedUpBalance.c_str());
+    char free_buf[24];
+    snprintf(free_buf, sizeof(free_buf), "free %s", grantedBalance.c_str());
+
+    _canvas->setTextSize(2);
+    _canvas->drawCenterString(topup_buf, 120, 160);
+    _canvas->drawCenterString(free_buf, 120, 182);
 
     _draw_quit_button();
     _canvas->pushSprite(0, 0);
