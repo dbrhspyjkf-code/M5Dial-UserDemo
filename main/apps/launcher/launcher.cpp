@@ -17,6 +17,12 @@
 
 using namespace MOONCAKE::USER_APP;
 
+/* Backlight off after the screensaver has been showing this long with no
+   activity; restored to this brightness on wake (same value IDLE_SCREEN
+   uses for its own screen-off/on cycle inside apps). */
+static const uint32_t SCREENSAVER_SCREEN_OFF_MS = 3 * 60 * 1000;
+static const int SCREENSAVER_ON_BRIGHTNESS = 128;
+
 
 void Launcher::_menu_init()
 {
@@ -306,9 +312,16 @@ void Launcher::_screensaver_tick()
     {
         if (activity)
         {
-            /* Absorb the gesture that dismissed the screensaver, same
-               "wake, don't act" convention as IDLE_SCREEN, so it can't
-               also select whatever icon is under the touch. */
+            /* If the backlight was off, turning it back on IS the wake
+               gesture - don't also let it act as an icon tap/rotation on
+               the home carousel underneath, same "wake, don't act"
+               convention as IDLE_SCREEN. */
+            if (_data.screen_off)
+            {
+                _data.hal->display.setBrightness(SCREENSAVER_ON_BRIGHTNESS);
+                _data.screen_off = false;
+            }
+
             if (touched)
             {
                 while (_data.hal->tp.isTouched())
@@ -325,6 +338,22 @@ void Launcher::_screensaver_tick()
 
             _data.screensaver_on = false;
             _data.screensaver_last_activity_ms = millis();
+            return;
+        }
+
+        /* Backlight off after SCREENSAVER_SCREEN_OFF_MS of no activity
+           since the screensaver came up - nothing to render once it's
+           off, so skip the once-a-second refresh below too. */
+        if (!_data.screen_off &&
+            millis() - _data.screensaver_started_ms > SCREENSAVER_SCREEN_OFF_MS)
+        {
+            _data.hal->display.setBrightness(0);
+            _data.screen_off = true;
+            return;
+        }
+
+        if (_data.screen_off)
+        {
             return;
         }
 
@@ -346,6 +375,8 @@ void Launcher::_screensaver_tick()
     if (millis() - _data.screensaver_last_activity_ms > 30000)
     {
         _data.screensaver_on = true;
+        _data.screensaver_started_ms = millis();
+        _data.screen_off = false;
         _fetch_weather();
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
