@@ -19,6 +19,7 @@ namespace WIFI_CONNECT
     static EventGroupHandle_t s_event_group = nullptr;
     static esp_netif_t* s_sta_netif = nullptr;
     static bool s_connected = false;
+    static bool s_initialized = false;
 
     #define WIFI_CONNECTED_BIT BIT0
     #define WIFI_FAIL_BIT       BIT1
@@ -32,10 +33,21 @@ namespace WIFI_CONNECT
         }
         else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
         {
+            /* By default the STA does NOT auto-reconnect after this event -
+               without explicitly retrying here, one transient drop (AP
+               reboot, roam, interference) leaves the radio disconnected
+               forever, while s_connected below still latches true from the
+               original connect() call. Every app's HA_CLIENT call then
+               fails with "unreachable" until the device is power-cycled. */
+            s_connected = false;
+            xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT);
             xEventGroupSetBits(s_event_group, WIFI_FAIL_BIT);
+            esp_wifi_connect();
         }
         else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
         {
+            s_connected = true;
+            xEventGroupClearBits(s_event_group, WIFI_FAIL_BIT);
             xEventGroupSetBits(s_event_group, WIFI_CONNECTED_BIT);
         }
     }
@@ -45,6 +57,30 @@ namespace WIFI_CONNECT
         if (s_connected)
         {
             return true;
+        }
+
+        if (s_initialized)
+        {
+            /* WiFi stack is already up (e.g. after a prior connect() call)
+               and a reconnect is already in flight from event_handler above
+               - just wait for it instead of re-running init, which would
+               hit ESP_ERROR_CHECK failures on the already-initialized
+               netif/event loop/wifi driver. */
+            xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+            esp_wifi_connect();
+
+            EventBits_t bits = xEventGroupWaitBits(
+                s_event_group,
+                WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                pdFALSE, pdFALSE,
+                pdMS_TO_TICKS(timeout_ms));
+
+            s_connected = (bits & WIFI_CONNECTED_BIT) != 0;
+            if (!s_connected)
+            {
+                ESP_LOGE(TAG, "reconnect failed or timed out");
+            }
+            return s_connected;
         }
 
         esp_err_t ret = nvs_flash_init();
@@ -88,6 +124,7 @@ namespace WIFI_CONNECT
             pdMS_TO_TICKS(timeout_ms));
 
         s_connected = (bits & WIFI_CONNECTED_BIT) != 0;
+        s_initialized = true;
 
         if (!s_connected)
         {
@@ -99,7 +136,7 @@ namespace WIFI_CONNECT
 
     void disconnect()
     {
-        if (!s_connected)
+        if (!s_initialized)
         {
             return;
         }
@@ -115,5 +152,6 @@ namespace WIFI_CONNECT
         s_event_group = nullptr;
         s_sta_netif = nullptr;
         s_connected = false;
+        s_initialized = false;
     }
 }
