@@ -12,9 +12,6 @@
 #include <driver/i2c.h>
 #include <esp_log.h>
 #include <cstring>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include "../hal_common_define.h"
 
 
 /** @brief FT5x06 register map and function codes */
@@ -114,105 +111,20 @@ namespace FT3267
             Config_t _cfg;
             uint8_t _data_buffer[7];
             TouchPoint_t _touch_point_buffer;
-            uint32_t _consecutive_failures = 0;
 
 
-            inline esp_err_t _writr_reg_raw(uint8_t reg, uint8_t data)
-            {
-                _data_buffer[0] = reg;
-                _data_buffer[1] = data;
-                return i2c_master_write_to_device(_cfg.i2c_port, _cfg.dev_addr, _data_buffer, 2, pdMS_TO_TICKS(200));
-            }
-
-
-            inline esp_err_t _read_reg_raw(uint8_t reg, uint8_t readSize)
-            {
-                /* Store data into buffer */
-                return i2c_master_write_read_device(_cfg.i2c_port, _cfg.dev_addr, &reg, 1, _data_buffer, readSize, pdMS_TO_TICKS(200));
-            }
-
-
-            /**
-             * @brief Re-init the I2C_NUM_0 bus driver (shared with the RTC)
-             * and re-write this chip's config registers. Neither
-             * _read_reg_raw() nor _writr_reg_raw() ever checked their
-             * return code, so a wedged bus (a slave stretching/holding a
-             * line, or a corrupted transaction the legacy i2c driver
-             * doesn't self-recover from) used to leave every touch read
-             * silently failing forever - getTouchPointsNum() zeroes its
-             * buffer before each read, so a stuck bus reads as "never
-             * touched" indefinitely instead of erroring visibly.
-             */
-            inline void _recover_bus()
-            {
-                ESP_LOGW(TAG, "touch I2C read failed %u times in a row, recovering bus",
-                         (unsigned)_consecutive_failures);
-
-                i2c_driver_delete(_cfg.i2c_port);
-
-                i2c_config_t conf;
-                memset(&conf, 0, sizeof(conf));
-                conf.mode = I2C_MODE_MASTER;
-                conf.sda_io_num = HAL_PIN_TP_I2C_SDA;
-                conf.scl_io_num = HAL_PIN_TP_I2C_SCL;
-                conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-                conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-                conf.master.clk_speed = 100000;
-                conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
-                i2c_param_config(_cfg.i2c_port, &conf);
-                i2c_driver_install(_cfg.i2c_port, I2C_MODE_MASTER, 0, 0, 0);
-
-                _tp_init();
-                _consecutive_failures = 0;
-            }
-
-
-            /**
-             * @brief Retry a couple of times before giving up - most real
-             * failures are a single noisy transaction, not a wedged bus.
-             * Recovers the bus if failures keep piling up across calls.
-             */
             inline esp_err_t _writr_reg(uint8_t reg, uint8_t data)
             {
-                esp_err_t err = _writr_reg_raw(reg, data);
-                for (int retry = 0; err != ESP_OK && retry < 2; retry++)
-                {
-                    vTaskDelay(pdMS_TO_TICKS(5));
-                    err = _writr_reg_raw(reg, data);
-                }
-
-                if (err == ESP_OK)
-                {
-                    _consecutive_failures = 0;
-                }
-                else if (++_consecutive_failures >= 10)
-                {
-                    _recover_bus();
-                }
-
-                return err;
+                _data_buffer[0] = reg;
+                _data_buffer[1] = data; 
+                return i2c_master_write_to_device(_cfg.i2c_port, _cfg.dev_addr, _data_buffer, 2, pdMS_TO_TICKS(200));
             }
 
 
             inline esp_err_t _read_reg(uint8_t reg, uint8_t readSize)
             {
-                esp_err_t err = _read_reg_raw(reg, readSize);
-                for (int retry = 0; err != ESP_OK && retry < 2; retry++)
-                {
-                    vTaskDelay(pdMS_TO_TICKS(5));
-                    err = _read_reg_raw(reg, readSize);
-                }
-
-                if (err == ESP_OK)
-                {
-                    _consecutive_failures = 0;
-                }
-                else if (++_consecutive_failures >= 10)
-                {
-                    _recover_bus();
-                }
-
-                return err;
+                /* Store data into buffer */
+                return i2c_master_write_read_device(_cfg.i2c_port, _cfg.dev_addr, &reg, 1, _data_buffer, readSize, pdMS_TO_TICKS(200));
             }
 
 
