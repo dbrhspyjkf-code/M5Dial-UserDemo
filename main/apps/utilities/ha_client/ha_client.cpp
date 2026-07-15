@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -17,6 +18,17 @@ namespace HA_CLIENT
     static const char* TAG = "ha_client";
     static esp_http_client_handle_t s_client = nullptr;
     static SemaphoreHandle_t s_mutex = nullptr;
+    static uint32_t s_last_call_ms = 0;
+
+    /* HA (aiohttp) closes idle keep-alive connections after its own
+       server-side timeout - comfortably under aiohttp's common ~75s
+       default, so a connection this client hasn't used in a while is
+       proactively closed and reconnected fresh instead of risking reuse
+       of a socket the server has already dropped (that used to fail
+       with ESP_ERR_HTTP_EAGAIN). Calls closer together than this (a
+       poll loop, rapid volume/brightness changes) reuse the same
+       connection and skip paying a new TCP handshake every time. */
+    static const uint32_t HA_IDLE_CLOSE_MS = 20000;
 
     struct ResponseBuffer
     {
@@ -71,6 +83,12 @@ namespace HA_CLIENT
     {
         xSemaphoreTake(s_mutex, portMAX_DELAY);
 
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        if (s_last_call_ms != 0 && now_ms - s_last_call_ms > HA_IDLE_CLOSE_MS)
+        {
+            esp_http_client_close(s_client);
+        }
+
         char url[256];
         snprintf(url, sizeof(url), "%s%s", base_url, path);
 
@@ -97,19 +115,15 @@ namespace HA_CLIENT
 
         esp_err_t err = esp_http_client_perform(s_client);
         int status = esp_http_client_get_status_code(s_client);
+        s_last_call_ms = now_ms;
 
-        /* Close the underlying transport after every call instead of
-           leaving the keep-alive socket open across calls. HA (aiohttp)
-           closes idle keep-alive connections after its own timeout, but
-           this client handle has no way to know that happened - reusing
-           the now-dead socket on the next call was failing with
-           ESP_ERR_HTTP_EAGAIN (0x7007) once an app had been closed for a
-           while. esp_http_client_close() only tears down the transport
-           (cheap), not the whole handle/header list like a full
-           cleanup+init would (that was the original per-call leak this
-           persistent client was introduced to avoid) - the next call
-           just reconnects fresh. */
-        esp_http_client_close(s_client);
+        if (err != ESP_OK || status != 200)
+        {
+            /* Force a clean reconnect next time regardless of the idle
+               check above - reusing a socket that just errored is
+               asking for the same failure again immediately. */
+            esp_http_client_close(s_client);
+        }
 
         xSemaphoreGive(s_mutex);
 
