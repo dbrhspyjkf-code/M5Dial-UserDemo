@@ -13,6 +13,7 @@
 #include "../utilities/idle_screen/idle_screen.h"
 #include "../utilities/weather_client/weather_client.h"
 #include <ctime>
+#include "esp_system.h"
 
 
 using namespace MOONCAKE::USER_APP;
@@ -27,6 +28,13 @@ static const int SCREENSAVER_ON_BRIGHTNESS = 128;
    failed first attempt (or just stale data) doesn't stick around for
    the whole time it's displayed. */
 static const uint32_t SCREENSAVER_WEATHER_REFRESH_MS = 10 * 60 * 1000;
+
+/* Holding the physical encoder button on the home carousel this long
+   reboots the device. Reads the button GPIO directly, not touch - the
+   touch panel has a known intermittent I2C failure (hal_tp.hpp) that
+   only clears on reboot, and when it's out, an on-screen touch button
+   would be exactly as unreachable as everything else. */
+static const uint32_t REBOOT_HOLD_MS = 3000;
 
 
 void Launcher::_menu_init()
@@ -130,9 +138,23 @@ void Launcher::_launcher_loop()
     {
         _data.menu->getSelector()->pressed();
 
-        /* Hold until button release */
+        uint32_t press_start_ms = millis();
+
+        /* Hold until button release (or the long-press reboot threshold) */
         while (!_data.hal->encoder.btn.read())
         {
+            if (millis() - press_start_ms > REBOOT_HOLD_MS)
+            {
+                _data.hal->canvas->fillScreen(TFT_BLACK);
+                _data.hal->canvas->setFont(&fonts::Font0);
+                _data.hal->canvas->setTextColor(TFT_WHITE);
+                _data.hal->canvas->setTextSize(2);
+                _data.hal->canvas->drawCenterString("REBOOTING...", 120, 120);
+                _data.hal->canvas->pushSprite(0, 0);
+                delay(400);
+                esp_restart();
+            }
+
             _data.menu->update(millis());
             _canvas_update();
         }
