@@ -23,6 +23,11 @@ using namespace MOONCAKE::USER_APP;
 static const uint32_t SCREENSAVER_SCREEN_OFF_MS = 3 * 60 * 1000;
 static const int SCREENSAVER_ON_BRIGHTNESS = 128;
 
+/* Re-fetch weather periodically while the screensaver stays up, so a
+   failed first attempt (or just stale data) doesn't stick around for
+   the whole time it's displayed. */
+static const uint32_t SCREENSAVER_WEATHER_REFRESH_MS = 10 * 60 * 1000;
+
 
 void Launcher::_menu_init()
 {
@@ -185,7 +190,19 @@ void Launcher::_launcher_loop()
 
 void Launcher::_fetch_weather()
 {
-    WEATHER_CLIENT::WeatherInfo info = WEATHER_CLIENT::get_weather(WEATHER_API_BASE_URL);
+    /* A transient WiFi hiccup at the exact moment the screensaver comes
+       up used to leave the weather line blank ("--") for the entire
+       time it stayed up, since this was only ever called once per
+       activation with no retry. Retry a couple of times, a beat apart,
+       before giving up. */
+    WEATHER_CLIENT::WeatherInfo info;
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        info = WEATHER_CLIENT::get_weather(WEATHER_API_BASE_URL);
+        if (info.ok) break;
+        delay(500);
+    }
+
     _data.weather_ok = info.ok;
     _data.weather_temp_c = info.temp_c;
     _data.weather_condition = info.condition;
@@ -371,6 +388,12 @@ void Launcher::_screensaver_tick()
             return;
         }
 
+        if (millis() - _data.screensaver_last_weather_fetch_ms > SCREENSAVER_WEATHER_REFRESH_MS)
+        {
+            _fetch_weather();
+            _data.screensaver_last_weather_fetch_ms = millis();
+        }
+
         /* Refresh the displayed clock once a second while idle */
         if (millis() - _data.screensaver_last_render_ms >= 1000)
         {
@@ -392,6 +415,7 @@ void Launcher::_screensaver_tick()
         _data.screensaver_started_ms = millis();
         _data.screen_off = false;
         _fetch_weather();
+        _data.screensaver_last_weather_fetch_ms = millis();
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
     }

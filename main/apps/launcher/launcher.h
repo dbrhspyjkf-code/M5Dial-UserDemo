@@ -49,6 +49,7 @@ namespace MOONCAKE
 
                 bool screen_off = false;
                 uint32_t screensaver_started_ms = 0;
+                uint32_t screensaver_last_weather_fetch_ms = 0;
 
                 bool weather_ok = false;
                 std::string weather_temp_c;
