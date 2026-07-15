@@ -130,6 +130,21 @@ namespace WIFI_CONNECT
         {
             ESP_LOGE(TAG, "connect failed or timed out");
         }
+        else
+        {
+            /* ESP-IDF defaults to WIFI_PS_MIN_MODEM (modem sleep) - the
+               radio dozes between the AP's beacon intervals to save
+               power, and a fresh outbound packet (e.g. the very first
+               SYN when an app opens a new HTTP connection) can end up
+               waiting for the radio to wake before it actually goes out.
+               Confirmed live: even a one-shot client with zero
+               connection reuse (weather_client) was failing with
+               "esp-tls: select() timeout" / "Failed to open a new
+               connection" on fresh connects - this device is USB-powered
+               anyway, so there's no reason to trade connection latency
+               for power savings it doesn't need. */
+            esp_wifi_set_ps(WIFI_PS_NONE);
+        }
 
         return s_connected;
     }
