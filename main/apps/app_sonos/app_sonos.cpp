@@ -190,19 +190,26 @@ void AppSonos::_render()
 
 void AppSonos::onRunning()
 {
-    _handle_encoder();
-    _handle_volume_debounce();
-    _handle_touch();
-    _handle_poll();
-
-    /* If button pressed: quit, unconditionally (same convention as every other app) */
+    /* Checked first, before _handle_poll() - that call blocks for up to
+       HA_CLIENT's timeout every ~3s (its own poll interval), and used to
+       only get checked afterward, so a quit press timed just before a
+       poll cycle could sit waiting on that request instead of exiting
+       immediately. Doesn't help if the button is pressed while a poll is
+       already in flight (nothing can cut that short), but it stops this
+       app from starting a new one after the button's already been hit. */
     if (!_data.hal->encoder.btn.read())
     {
         while (!_data.hal->encoder.btn.read())
             delay(5);
 
         destroyApp();
+        return;
     }
+
+    _handle_encoder();
+    _handle_volume_debounce();
+    _handle_touch();
+    _handle_poll();
 }
 
 

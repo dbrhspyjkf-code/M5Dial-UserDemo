@@ -50,7 +50,11 @@ namespace HA_CLIENT
 
         esp_http_client_config_t config = {};
         config.url = "http://localhost/"; /* overwritten before every perform() */
-        config.timeout_ms = 5000;
+        /* Home Assistant is on the same LAN - a healthy request completes
+           in well under a second. Kept short so a stuck/slow request
+           can't block an app's quit button (checked after any in-flight
+           call returns) for longer than this. */
+        config.timeout_ms = 2500;
         config.event_handler = _http_event_handler;
 
         s_client = esp_http_client_init(&config);
