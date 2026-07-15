@@ -127,19 +127,21 @@ void RTC_Test::_handle_touch()
     {
         if (x >= 30 && x <= 118)
         {
-            /* POWER button */
+            /* POWER button - _data.fan_on is already flipped optimistically
+               above, so render immediately with that instead of paying a
+               second blocking HA_CLIENT call (_refresh_state()) just to
+               read back the value we already know we asked for - that
+               doubled every button press's response time. */
             _data.fan_on = !_data.fan_on;
-            HA_CLIENT::set_fan_power(FAN_HA_BASE_URL, FAN_HA_TOKEN, FAN_ENTITY_ID, _data.fan_on);
-            _refresh_state();
             _render();
+            HA_CLIENT::set_fan_power(FAN_HA_BASE_URL, FAN_HA_TOKEN, FAN_ENTITY_ID, _data.fan_on);
         }
         else if (x >= 122 && x <= 210)
         {
-            /* SWING button */
+            /* SWING button - same reasoning as POWER above */
             _data.oscillating = !_data.oscillating;
-            HA_CLIENT::set_fan_oscillating(FAN_HA_BASE_URL, FAN_HA_TOKEN, FAN_ENTITY_ID, _data.oscillating);
-            _refresh_state();
             _render();
+            HA_CLIENT::set_fan_oscillating(FAN_HA_BASE_URL, FAN_HA_TOKEN, FAN_ENTITY_ID, _data.oscillating);
         }
     }
 
