@@ -94,6 +94,19 @@ namespace HA_CLIENT
         esp_err_t err = esp_http_client_perform(s_client);
         int status = esp_http_client_get_status_code(s_client);
 
+        /* Close the underlying transport after every call instead of
+           leaving the keep-alive socket open across calls. HA (aiohttp)
+           closes idle keep-alive connections after its own timeout, but
+           this client handle has no way to know that happened - reusing
+           the now-dead socket on the next call was failing with
+           ESP_ERR_HTTP_EAGAIN (0x7007) once an app had been closed for a
+           while. esp_http_client_close() only tears down the transport
+           (cheap), not the whole handle/header list like a full
+           cleanup+init would (that was the original per-call leak this
+           persistent client was introduced to avoid) - the next call
+           just reconnects fresh. */
+        esp_http_client_close(s_client);
+
         xSemaphoreGive(s_mutex);
 
         if (err != ESP_OK || status != 200)
