@@ -95,6 +95,16 @@ namespace HA_CLIENT
      */
     SwitchState get_switch_state(const char* base_url, const char* token, const char* entity_id);
 
+    /**
+     * @brief POST /api/services/select/select_option with
+     * {"entity_id": entity_id, "option": option}. Used for the master
+     * bedroom light switches, which HA exposes as stateless "select"
+     * toggle actuators (state always reads "unknown") rather than a
+     * switch domain entity with a real on/off state.
+     */
+    bool select_option(const char* base_url, const char* token,
+                        const char* entity_id, const char* option);
+
     struct NumberState
     {
         bool ok = false;

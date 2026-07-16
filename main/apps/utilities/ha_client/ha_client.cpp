@@ -345,6 +345,17 @@ namespace HA_CLIENT
     }
 
 
+    bool select_option(const char* base_url, const char* token,
+                        const char* entity_id, const char* option)
+    {
+        char body[192];
+        snprintf(body, sizeof(body), "{\"entity_id\": \"%s\", \"option\": \"%s\"}",
+                 entity_id, option);
+
+        return _post_json(base_url, token, "/api/services/select/select_option", body);
+    }
+
+
     NumberState get_number_state(const char* base_url, const char* token, const char* entity_id)
     {
         NumberState result;

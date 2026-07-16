@@ -20,10 +20,20 @@ void Set_Brightness::onSetup()
     _data = default_data;
 
     _data.hal = (HAL::HAL*)getUserData();
+
+    _data.switches = {
+        { "筒灯",     LIGHTS_TONG_ENTITY_ID },
+        { "吸顶灯",   LIGHTS_XIDING_ENTITY_ID },
+        { "餐厅灯",   LIGHTS_CANTING_ENTITY_ID },
+        { "书台灯",   LIGHTS_SHUTAI_ENTITY_ID },
+        { "走廊灯",   LIGHTS_ZOULANG_ENTITY_ID },
+        { "厨房灯",   LIGHTS_CHUFANG_ENTITY_ID },
+        { "卫生间灯", LIGHTS_WEISHENGJIAN_ENTITY_ID },
+    };
 }
 
 
-void Set_Brightness::_refresh_state()
+void Set_Brightness::_refresh_fishtank_state()
 {
     HA_CLIENT::LightState light = HA_CLIENT::get_light_state(
         FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN, FISHTANK_ENTITY_ID);
@@ -56,6 +66,31 @@ void Set_Brightness::_refresh_state()
 }
 
 
+void Set_Brightness::_fetch_all()
+{
+    for (auto& sw : _data.switches)
+    {
+        HA_CLIENT::SwitchState state = HA_CLIENT::get_switch_state(
+            FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN, sw.entity_id.c_str());
+
+        if (!state.ok)
+        {
+            _data.state = State::ERROR;
+            _data.error_message = "HA unreachable";
+            return;
+        }
+
+        sw.is_on = state.is_on;
+    }
+
+    /* Master bedroom's two switches (PAGE_MASTER_BEDROOM) have no state
+       to fetch - HA reports them as stateless "select" toggle actuators
+       (see LIGHTS_MASTER_BIG/SMALL_ENTITY_ID). */
+
+    _refresh_fishtank_state();
+}
+
+
 void Set_Brightness::onCreate()
 {
     _log("onCreate");
@@ -77,7 +112,7 @@ void Set_Brightness::onCreate()
         return;
     }
 
-    _refresh_state();
+    _fetch_all();
     if (_data.state != State::ERROR)
     {
         _data.state = State::CONTROLLING;
@@ -94,25 +129,12 @@ void Set_Brightness::_handle_encoder()
     if (!_data.hal->encoder.wasMoved(true))
         return;
 
+    /* Encoder always browses between lights, on every page including
+       the fish tank - brightness/effect adjustment on that page moved
+       to on-screen +/- buttons instead, so the encoder has one
+       consistent job everywhere in this app. */
     int direction = (_data.hal->encoder.getDirection() < 1) ? 1 : -1;
-
-    if (_data.control_mode == ControlMode::BRIGHTNESS)
-    {
-        _data.brightness_pct += direction * 5;
-        if (_data.brightness_pct < 0) _data.brightness_pct = 0;
-        if (_data.brightness_pct > 100) _data.brightness_pct = 100;
-
-        _data.brightness_dirty = true;
-        _data.last_brightness_change_ms = millis();
-    }
-    else if (!_data.effect_list.empty())
-    {
-        int count = (int)_data.effect_list.size();
-        _data.effect_index = ((_data.effect_index + direction) % count + count) % count;
-
-        _data.effect_dirty = true;
-        _data.last_effect_change_ms = millis();
-    }
+    _data.current_page = ((_data.current_page + direction) % PAGE_COUNT + PAGE_COUNT) % PAGE_COUNT;
 
     _render();
 }
@@ -161,28 +183,104 @@ void Set_Brightness::_handle_touch()
         _render();
         onCreate();
     }
-    else if (_data.state == State::CONTROLLING && y >= 184 && y <= 212)
+    else if (_data.state == State::CONTROLLING)
     {
-        if (x >= 30 && x <= 118)
+        if (_data.current_page < SWITCH_COUNT)
         {
-            /* MODE button: only switch to EFFECT if there's something to select */
-            if (_data.control_mode == ControlMode::BRIGHTNESS && !_data.effect_list.empty())
+            /* Plain switch page - the big ON/OFF button fills most of
+               the middle of the screen */
+            if (y >= 95 && y <= 155 && x >= 60 && x <= 180)
             {
-                _data.control_mode = ControlMode::EFFECT;
+                SwitchItem& sw = _data.switches[_data.current_page];
+                sw.is_on = !sw.is_on;
+                _render();
+                HA_CLIENT::call_service(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
+                                         "switch", sw.is_on ? "turn_on" : "turn_off",
+                                         sw.entity_id.c_str());
             }
-            else
-            {
-                _data.control_mode = ControlMode::BRIGHTNESS;
-            }
-            _render();
         }
-        else if (x >= 122 && x <= 210)
+        else if (_data.current_page == PAGE_MASTER_BEDROOM)
         {
-            _data.light_on = !_data.light_on;
-            HA_CLIENT::set_light_power(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
-                                        FISHTANK_ENTITY_ID, _data.light_on);
-            _refresh_state();
-            _render();
+            if (y >= 95 && y <= 155)
+            {
+                if (x >= 20 && x <= 118)
+                {
+                    HA_CLIENT::select_option(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
+                                              LIGHTS_MASTER_BIG_ENTITY_ID, "On");
+                }
+                else if (x >= 122 && x <= 220)
+                {
+                    HA_CLIENT::select_option(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
+                                              LIGHTS_MASTER_SMALL_ENTITY_ID, "On");
+                }
+            }
+        }
+        else /* PAGE_FISHTANK */
+        {
+            if (y >= 100 && y <= 140)
+            {
+                if (x >= 20 && x <= 65)
+                {
+                    /* "-" button */
+                    if (_data.control_mode == ControlMode::BRIGHTNESS)
+                    {
+                        _data.brightness_pct -= 5;
+                        if (_data.brightness_pct < 0) _data.brightness_pct = 0;
+                        _data.brightness_dirty = true;
+                        _data.last_brightness_change_ms = millis();
+                    }
+                    else if (!_data.effect_list.empty())
+                    {
+                        int count = (int)_data.effect_list.size();
+                        _data.effect_index = (_data.effect_index - 1 + count) % count;
+                        _data.effect_dirty = true;
+                        _data.last_effect_change_ms = millis();
+                    }
+                    _render();
+                }
+                else if (x >= 175 && x <= 220)
+                {
+                    /* "+" button */
+                    if (_data.control_mode == ControlMode::BRIGHTNESS)
+                    {
+                        _data.brightness_pct += 5;
+                        if (_data.brightness_pct > 100) _data.brightness_pct = 100;
+                        _data.brightness_dirty = true;
+                        _data.last_brightness_change_ms = millis();
+                    }
+                    else if (!_data.effect_list.empty())
+                    {
+                        int count = (int)_data.effect_list.size();
+                        _data.effect_index = (_data.effect_index + 1) % count;
+                        _data.effect_dirty = true;
+                        _data.last_effect_change_ms = millis();
+                    }
+                    _render();
+                }
+            }
+            else if (y >= 184 && y <= 212)
+            {
+                if (x >= 30 && x <= 118)
+                {
+                    /* MODE button: only switch to EFFECT if there's something to select */
+                    if (_data.control_mode == ControlMode::BRIGHTNESS && !_data.effect_list.empty())
+                    {
+                        _data.control_mode = ControlMode::EFFECT;
+                    }
+                    else
+                    {
+                        _data.control_mode = ControlMode::BRIGHTNESS;
+                    }
+                    _render();
+                }
+                else if (x >= 122 && x <= 210)
+                {
+                    _data.light_on = !_data.light_on;
+                    _render();
+                    HA_CLIENT::set_light_power(FISHTANK_HA_BASE_URL, FISHTANK_HA_TOKEN,
+                                                FISHTANK_ENTITY_ID, _data.light_on);
+                }
+            }
         }
     }
 
@@ -204,14 +302,24 @@ void Set_Brightness::_render()
     {
         _gui.renderStatus(_data.error_message, "TAP TO RETRY");
     }
+    else if (_data.current_page < SWITCH_COUNT)
+    {
+        const SwitchItem& sw = _data.switches[_data.current_page];
+        _gui.renderSwitch(sw.name, sw.is_on, _data.current_page, PAGE_COUNT);
+    }
+    else if (_data.current_page == PAGE_MASTER_BEDROOM)
+    {
+        _gui.renderMasterBedroom(_data.current_page, PAGE_COUNT);
+    }
     else
     {
         std::string effect_name = _data.effect_list.empty()
             ? "(no effects)"
             : _data.effect_list[_data.effect_index];
 
-        _gui.renderPage(_data.control_mode == ControlMode::BRIGHTNESS,
-                         _data.brightness_pct, effect_name, _data.light_on);
+        _gui.renderFishtank(_data.control_mode == ControlMode::BRIGHTNESS,
+                             _data.brightness_pct, effect_name, _data.light_on,
+                             _data.current_page, PAGE_COUNT);
     }
 }
 
