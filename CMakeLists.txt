@@ -31,4 +31,4 @@ add_definitions(-DGUI_FONT_CN_SMALL=&fonts::efontCN_16_b)
 
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(stamp_ring_factory_test)
+project(m5dial_userdemo)

@@ -35,7 +35,7 @@ namespace HAL
         // // display.setTextColor((uint32_t)0xF3E9D2);
         // // display.setFont(&fonts::efontCN_24);
         // display.setTextColor(TFT_WHITE);
-        // display.drawCenterString("StampRing", display.width() / 2, display.height() / 2 - 32);
+        // display.drawCenterString("M5-DIAL", display.width() / 2, display.height() / 2 - 32);
         // for (int i = 0; i < 128; i++)
         // {
         //     display.setBrightness(i);

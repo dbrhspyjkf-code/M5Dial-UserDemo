@@ -38,7 +38,7 @@ namespace HAL
         ~HAL() = default;
 
         /* Display */
-        LGFX_StampRing display;
+        LGFX_M5Dial display;
         LGFX_Sprite* canvas;
 
         /* Buzzer */
