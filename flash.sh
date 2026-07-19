@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Configs
-IDF_PATH=$HOME/esp/esp-idf-v5.1.3/
-SERIAL_PORT=/dev/ttyACM0
+IDF_PATH=${IDF_PATH:-$HOME/esp-idf-v5.1.3}
+# Auto-detect the board's serial port (macOS: /dev/cu.usbmodem*), override via env if needed
+SERIAL_PORT=${SERIAL_PORT:-$(ls /dev/cu.usbmodem* /dev/ttyACM* 2>/dev/null | head -1)}
 
 
 # Help shit
