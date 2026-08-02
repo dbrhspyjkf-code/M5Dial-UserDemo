@@ -16,7 +16,6 @@
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include "hal/hal_common_define.h"
 #include <cstring>
 
 
@@ -238,10 +237,14 @@ namespace FT3267
                       never enough on its own but worth trying first
                  L2 = write DEVICE_MODE=0 to trigger the controller's
                       internal reset path, then re-init
-                 L3 = hardware reset: pull LCD_RST low 20ms (the FT3267
-                      shares this pin with the GC9A01 panel, so the screen
-                      briefly blanks - acceptable trade-off vs. a full
-                      reboot via the power button)
+
+               There used to be an L3 = pull LCD_RST low 20ms (the FT3267
+               shares that pin with the GC9A01 panel) but that left the
+               display permanently black: LovyanGFX doesn't know about
+               the reset and never re-runs the panel init sequence.
+               Rather than wire a display-reinit callback into the TP
+               driver, we stop at L2 - if both tiers fail, log loudly
+               and let the user hold the encoder button 3s to reboot.
 
                The ladder only advances when we actually see the known
                hang signature (G_MODE=0x00, FIRMID=0x00, i2c alive) -
@@ -254,7 +257,7 @@ namespace FT3267
             {
                 static const uint32_t REINIT_INTERVAL_MS = 20000;
                 static uint32_t s_last_reinit_ms = 0;
-                static int s_heal_lvl = 0;   /* 0=idle, 1=L1 done, 2=L2 done, 3=L3 done */
+                static int s_heal_lvl = 0;   /* 0=idle, 1=L1 done, 2=L2 done, 3=exhausted */
 
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
                 if (s_last_reinit_ms == 0) { s_last_reinit_ms = now_ms; return; }
@@ -347,16 +350,19 @@ namespace FT3267
                 }
                 else
                 {
+                    /* L1 and L2 both failed. Stop trying - the earlier L3
+                       (LCD_RST pulse) left the GC9A01 panel permanently
+                       black because LovyanGFX doesn't re-init the panel
+                       after a hardware reset. Rather than add a
+                       display-reinit path into the TP driver, we hand off
+                       to the user: hold the encoder button 3s to reboot.
+                       Terminal state - s_heal_lvl stays at 3 until a real
+                       touch event comes in (then resets to 0 in the
+                       touch-recovered branch above). */
                     s_heal_lvl = 3;
-                    _dump_status("pre-L3");
-                    gpio_reset_pin((gpio_num_t)HAL_PIN_LCD_RST);
-                    gpio_set_direction((gpio_num_t)HAL_PIN_LCD_RST, GPIO_MODE_OUTPUT);
-                    gpio_set_level((gpio_num_t)HAL_PIN_LCD_RST, 0);
-                    vTaskDelay(pdMS_TO_TICKS(20));
-                    gpio_set_level((gpio_num_t)HAL_PIN_LCD_RST, 1);
-                    vTaskDelay(pdMS_TO_TICKS(200));
-                    _tp_init();
-                    ESP_LOGW(TAG, "[TP-DIAG] heal L3 fired (HARDWARE RESET - screen blink)");
+                    _dump_status("ladder-exhausted");
+                    ESP_LOGE(TAG, "[TP-DIAG] heal ladder exhausted: L1 and L2 "
+                                  "both failed. Hold encoder button 3s to reboot.");
                 }
             }
 
