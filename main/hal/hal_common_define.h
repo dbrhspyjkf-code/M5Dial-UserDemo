@@ -25,3 +25,8 @@
 #define HAL_PIN_GROVE_I2C_SDA   13
 
 #define HAL_PIN_BUZZER          3
+
+/* Shared with the GC9A01 panel (display driver uses it as RST). Exposed here
+   so the touch self-heal can pull it low to do a hardware reset of both the
+   panel and the FT3267 controller when the scan engine hangs. */
+#define HAL_PIN_LCD_RST         8

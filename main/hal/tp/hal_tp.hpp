@@ -11,6 +11,12 @@
 #pragma once
 #include <driver/i2c.h>
 #include <esp_log.h>
+#include <esp_timer.h>
+#include <esp_err.h>
+#include <driver/gpio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include "hal/hal_common_define.h"
 #include <cstring>
 
 
@@ -128,6 +134,36 @@ namespace FT3267
             }
 
 
+            /* Surface only the transitions, not a 1Hz heartbeat. The
+               touch-poll loop calls this at ~10Hz, so a steady-state
+               heartbeat would flood the console; a healthy controller
+               is by definition boring. The transitions are the signal:
+                 - err changes (esp. OK -> FAIL): i2c/wedged-controller entry
+                 - touch_num changes: real finger landing or leaving
+               Both are how we notice a hang kicking in. */
+            inline void _diag(esp_err_t err, uint8_t touch_num)
+            {
+                static esp_err_t s_last_err = ESP_OK;
+                static uint8_t s_last_num = 0xFF;  /* impossible - forces first-sample log */
+
+                if (err != s_last_err)
+                {
+                    ESP_LOGW(TAG, "[TP-DIAG] err changed: %s (0x%x), touch_num=%u",
+                             esp_err_to_name(err), err, touch_num);
+                    s_last_err = err;
+                    s_last_num = touch_num;
+                    return;
+                }
+
+                if (touch_num != s_last_num)
+                {
+                    ESP_LOGW(TAG, "[TP-DIAG] touch_num changed: %u (err=%s)",
+                             touch_num, esp_err_to_name(err));
+                    s_last_num = touch_num;
+                }
+            }
+
+
             inline void _tp_init()
             {
                 // Valid touching detect threshold
@@ -166,6 +202,165 @@ namespace FT3267
             }
 
 
+            /* Log the controller's own state registers right before each
+               heal tier fires. After the run, you can see in the log
+               whether L1/L2/L3 actually saw the known hang signature
+               (G_MODE=0x00, FIRMID=0x00) or some other odd state - which
+               is what determines whether to extend the heal ladder next
+               time the field reports a new failure mode. Clobbers
+               _data_buffer (call after the read you care about). */
+            inline void _dump_status(const char* when)
+            {
+                const uint8_t regs[4] = { FT5x06_ID_G_MODE, FT5x06_ID_G_PMODE,
+                                          FT5x06_ID_G_STATE, FT5x06_ID_G_FIRMID };
+                uint8_t v[4];
+                for (int i = 0; i < 4; i++)
+                    v[i] = (_read_reg(regs[i], 1) == ESP_OK) ? _data_buffer[0] : 0xEE;
+
+                ESP_LOGW(TAG, "[TP-DIAG] status(%s) G_MODE=0x%02x G_PMODE=0x%02x G_STATE=0x%02x FIRMID=0x%02x",
+                         when, v[0], v[1], v[2], v[3]);
+            }
+
+
+            /* FT3267 scan engine has been observed to hang after hours
+               of uptime: I2C still ACKs, but touch_num stays 0 even under
+               a finger. The tell is that G_MODE drops from 0x01 to 0x00
+               and FIRMID from 0x06 to 0x00, which a plain _tp_init() does
+               NOT recover from (re-initialising the threshold registers
+               doesn't restart the scan engine - validated against an
+               offline repro that stayed at touch_num=0 through multiple
+               re-inits).
+
+               Escalate in 3 tiers, each attempt spaced one interval
+               apart so a healthy controller is never disturbed:
+
+                 L1 = rewrite threshold registers (_tp_init) - cheap, almost
+                      never enough on its own but worth trying first
+                 L2 = write DEVICE_MODE=0 to trigger the controller's
+                      internal reset path, then re-init
+                 L3 = hardware reset: pull LCD_RST low 20ms (the FT3267
+                      shares this pin with the GC9A01 panel, so the screen
+                      briefly blanks - acceptable trade-off vs. a full
+                      reboot via the power button)
+
+               The ladder only advances when we actually see the known
+               hang signature (G_MODE=0x00, FIRMID=0x00, i2c alive) -
+               otherwise L3 would fire on every long idle period and
+               blank the shared LCD panel. Any tier that brings
+               touch_num > 0 resets back to L0. Only runs while idle
+               (touch_num == 0) so an in-progress touch is never
+               disrupted. */
+            inline void _maintenance(uint8_t touch_num)
+            {
+                static const uint32_t REINIT_INTERVAL_MS = 20000;
+                static uint32_t s_last_reinit_ms = 0;
+                static int s_heal_lvl = 0;   /* 0=idle, 1=L1 done, 2=L2 done, 3=L3 done */
+
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                if (s_last_reinit_ms == 0) { s_last_reinit_ms = now_ms; return; }
+
+                /* Touch recovered - drop back to idle so we don't escalate
+                   a future hang past the level that actually fixed the last one. */
+                if (touch_num > 0)
+                {
+                    if (s_heal_lvl != 0)
+                    {
+                        ESP_LOGI(TAG, "[TP-DIAG] touch recovered at heal-lvl=%d, reset to idle",
+                                 s_heal_lvl);
+                        s_heal_lvl = 0;
+                    }
+                    return;
+                }
+
+                if (now_ms - s_last_reinit_ms < REINIT_INTERVAL_MS) return;
+
+                s_last_reinit_ms = now_ms;
+
+                /* Distinguish three idle-but-touch_num=0 cases. Both healthy
+                   idle and a wedged i2c bus look identical from the read
+                   path alone, so peek at the controller's own state
+                   registers:
+                     - healthy idle: G_MODE=0x01, FIRMID=0x06
+                     - known hang:   G_MODE=0x00, FIRMID=0x00 (i2c alive)
+                     - i2c dead:     register reads return non-OK
+                   Any other G_MODE/FIRMID combo is treated as a "weird
+                   state" - logged but NOT healed, since the heal ladder
+                   is only known to fix the specific (0x00, 0x00) case. */
+                esp_err_t e_mode  = _read_reg(FT5x06_ID_G_MODE,   1);
+                uint8_t g_mode   = (e_mode == ESP_OK) ? _data_buffer[0] : 0xEE;
+                esp_err_t e_firm  = _read_reg(FT5x06_ID_G_FIRMID, 1);
+                uint8_t g_firmid = (e_firm == ESP_OK) ? _data_buffer[0] : 0xEE;
+
+                bool i2c_alive   = (e_mode == ESP_OK) && (e_firm == ESP_OK);
+                bool looks_hung  = i2c_alive && (g_mode == 0x00) && (g_firmid == 0x00);
+                bool looks_healthy = i2c_alive && (g_mode == 0x01);
+
+                if (looks_healthy)
+                {
+                    ESP_LOGI(TAG, "[TP-DIAG] idle, controller healthy "
+                                  "(G_MODE=0x%02x FIRMID=0x%02x) - no heal",
+                             g_mode, g_firmid);
+                    s_heal_lvl = 0;
+                    return;
+                }
+
+                if (!i2c_alive)
+                {
+                    ESP_LOGW(TAG, "[TP-DIAG] idle but I2C read failed (mode=%s, firm=%s) "
+                                  "- skip heal, retry next interval",
+                             esp_err_to_name(e_mode), esp_err_to_name(e_firm));
+                    return;
+                }
+
+                if (!looks_hung)
+                {
+                    /* Not the known hang signature, and not healthy, and
+                       not an i2c failure. Could be a transient mode (e.g.
+                       FT3267 in Monitor state with G_MODE=0x02). Logging
+                       only - we don't escalate a heal we have no reason
+                       to believe will help. */
+                    ESP_LOGW(TAG, "[TP-DIAG] idle, weird state "
+                                  "G_MODE=0x%02x FIRMID=0x%02x - skip heal, log only",
+                             g_mode, g_firmid);
+                    return;
+                }
+
+                /* Known hang signature. Walk up the heal ladder. */
+                ESP_LOGW(TAG, "[TP-DIAG] HANG DETECTED G_MODE=0x%02x FIRMID=0x%02x",
+                         g_mode, g_firmid);
+
+                if (s_heal_lvl < 1)
+                {
+                    s_heal_lvl = 1;
+                    _dump_status("pre-L1");
+                    _tp_init();
+                    ESP_LOGW(TAG, "[TP-DIAG] heal L1 fired (soft re-init)");
+                }
+                else if (s_heal_lvl < 2)
+                {
+                    s_heal_lvl = 2;
+                    _dump_status("pre-L2");
+                    _writr_reg(FT5x06_DEVICE_MODE, 0x00);
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    _tp_init();
+                    ESP_LOGW(TAG, "[TP-DIAG] heal L2 fired (DEVICE_MODE soft reset)");
+                }
+                else
+                {
+                    s_heal_lvl = 3;
+                    _dump_status("pre-L3");
+                    gpio_reset_pin((gpio_num_t)HAL_PIN_LCD_RST);
+                    gpio_set_direction((gpio_num_t)HAL_PIN_LCD_RST, GPIO_MODE_OUTPUT);
+                    gpio_set_level((gpio_num_t)HAL_PIN_LCD_RST, 0);
+                    vTaskDelay(pdMS_TO_TICKS(20));
+                    gpio_set_level((gpio_num_t)HAL_PIN_LCD_RST, 1);
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                    _tp_init();
+                    ESP_LOGW(TAG, "[TP-DIAG] heal L3 fired (HARDWARE RESET - screen blink)");
+                }
+            }
+
+
         public:
             TP_FT3267()
             {
@@ -197,8 +392,11 @@ namespace FT3267
             inline uint8_t getTouchPointsNum()
             {
                 _data_buffer[0] = 0;
-                _read_reg(FT5x06_TOUCH_POINTS, 1);
-                return _data_buffer[0];
+                esp_err_t err = _read_reg(FT5x06_TOUCH_POINTS, 1);
+                uint8_t raw = _data_buffer[0];   // save before _maintenance clobbers _data_buffer
+                _diag(err, raw & 0x0F);
+                _maintenance(raw & 0x0F);
+                return raw;
             }
 
 
@@ -209,9 +407,10 @@ namespace FT3267
                 _touch_point_buffer.y = -1;
 
                 /* Get touch num */
-                _read_reg(FT5x06_TOUCH_POINTS, 1);
+                esp_err_t err = _read_reg(FT5x06_TOUCH_POINTS, 1);
                 _data_buffer[0] = _data_buffer[0] & 0x0F;
                 _touch_point_buffer.touch_num = _data_buffer[0];
+                _diag(err, _data_buffer[0]);
 
                 /* Get postion */
                 if (_data_buffer[0] != 0)
