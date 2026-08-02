@@ -14,7 +14,6 @@
 #include "../utilities/smooth_menu/src/simple_menu/simple_menu.h"
 #include "launcher_render_callback.hpp"
 #include "../utilities/gui_base/gui_base.h"
-#include "screensaver_config.h"
 
 #include "../app_lcd_test/app_lcd_test.h"
 #include "../app_temp_demo/app_temp_demo.h"
@@ -49,11 +48,6 @@ namespace MOONCAKE
 
                 bool screen_off = false;
                 uint32_t screensaver_started_ms = 0;
-                uint32_t screensaver_last_weather_fetch_ms = 0;
-
-                bool weather_ok = false;
-                std::string weather_temp_c;
-                std::string weather_condition;
             };
         }
 
@@ -72,7 +66,6 @@ namespace MOONCAKE
 
                 void _screensaver_tick();
                 void _screensaver_render();
-                void _fetch_weather();
 
             public:
                 Launcher() = default;

@@ -11,7 +11,6 @@
 #include "launcher.h"
 #include "../common_define.h"
 #include "../utilities/idle_screen/idle_screen.h"
-#include "../utilities/weather_client/weather_client.h"
 #include <ctime>
 #include "esp_system.h"
 
@@ -23,11 +22,6 @@ using namespace MOONCAKE::USER_APP;
    uses for its own screen-off/on cycle inside apps). */
 static const uint32_t SCREENSAVER_SCREEN_OFF_MS = 3 * 60 * 1000;
 static const int SCREENSAVER_ON_BRIGHTNESS = 128;
-
-/* Re-fetch weather periodically while the screensaver stays up, so a
-   failed first attempt (or just stale data) doesn't stick around for
-   the whole time it's displayed. */
-static const uint32_t SCREENSAVER_WEATHER_REFRESH_MS = 10 * 60 * 1000;
 
 /* Holding the physical encoder button on the home carousel this long
    reboots the device. Reads the button GPIO directly, not touch - the
@@ -210,27 +204,6 @@ void Launcher::_launcher_loop()
 }
 
 
-void Launcher::_fetch_weather()
-{
-    /* A transient WiFi hiccup at the exact moment the screensaver comes
-       up used to leave the weather line blank ("--") for the entire
-       time it stayed up, since this was only ever called once per
-       activation with no retry. Retry a couple of times, a beat apart,
-       before giving up. */
-    WEATHER_CLIENT::WeatherInfo info;
-    for (int attempt = 0; attempt < 3; attempt++)
-    {
-        info = WEATHER_CLIENT::get_weather(WEATHER_API_BASE_URL);
-        if (info.ok) break;
-        delay(500);
-    }
-
-    _data.weather_ok = info.ok;
-    _data.weather_temp_c = info.temp_c;
-    _data.weather_condition = info.condition;
-}
-
-
 void Launcher::_screensaver_render()
 {
     struct tm time_now;
@@ -262,63 +235,6 @@ void Launcher::_screensaver_render()
 
     _data.hal->canvas->setTextSize(2);
     _data.hal->canvas->drawCenterString(date_buf, 120, 120);
-
-    /* Temp (ASCII) and condition (Chinese) are drawn as two separate
-       strings sized to visually match, then centered as a pair -
-       drawing them as one mixed string left the ASCII digits looking
-       smaller than the CJK glyphs even at the same nominal font size,
-       since this bitmap CJK font's Latin/digit glyphs don't fill the
-       same visual weight as its full-width Chinese characters. Reset
-       back to the default font afterward so it doesn't leak into the
-       carousel's own tag rendering. */
-    if (_data.weather_ok)
-    {
-        /* Font0 (this project's default bitmap font) is ASCII-only and
-           has no glyph for the degree symbol (0xB0) - it rendered as a
-           missing-glyph box. Draw the degree mark as a small circle
-           instead of relying on any font's glyph coverage. */
-        const std::string& temp_only = _data.weather_temp_c;
-        const int degree_gap = 6;
-        const int degree_r = 3;
-        const int degree_slot_w = degree_gap + degree_r * 2 + 2; /* +2 gap before "C" */
-
-        _data.hal->canvas->setFont(&fonts::Font0);
-        _data.hal->canvas->setTextSize(2);
-        int temp_only_w = _data.hal->canvas->textWidth(temp_only.c_str());
-        int c_w = _data.hal->canvas->textWidth("C");
-        int temp_total_w = temp_only_w + degree_slot_w + c_w;
-
-        _data.hal->canvas->setFont(&fonts::efontCN_16_b);
-        _data.hal->canvas->setTextSize(1);
-        int gap = 8;
-        int cond_w = _data.hal->canvas->textWidth(_data.weather_condition.c_str());
-
-        int start_x = 120 - (temp_total_w + gap + cond_w) / 2;
-
-        _data.hal->canvas->setFont(&fonts::Font0);
-        _data.hal->canvas->setTextSize(2);
-        _data.hal->canvas->setTextColor(TFT_WHITE);
-        _data.hal->canvas->drawString(temp_only.c_str(), start_x, 152);
-
-        int degree_cx = start_x + temp_only_w + degree_gap + degree_r;
-        int degree_cy = 152 + degree_r + 1;
-        _data.hal->canvas->drawCircle(degree_cx, degree_cy, degree_r, TFT_WHITE);
-
-        _data.hal->canvas->drawString("C", start_x + temp_only_w + degree_slot_w, 152);
-
-        _data.hal->canvas->setFont(&fonts::efontCN_16_b);
-        _data.hal->canvas->setTextSize(1);
-        _data.hal->canvas->setTextColor(TFT_WHITE);
-        _data.hal->canvas->drawString(_data.weather_condition.c_str(), start_x + temp_total_w + gap, 153);
-
-        _data.hal->canvas->setFont(&fonts::Font0);
-    }
-    else
-    {
-        _data.hal->canvas->setFont(&fonts::Font0);
-        _data.hal->canvas->setTextSize(2);
-        _data.hal->canvas->drawCenterString("--", 120, 152);
-    }
 
     _data.hal->canvas->pushSprite(0, 0);
 }
@@ -410,12 +326,6 @@ void Launcher::_screensaver_tick()
             return;
         }
 
-        if (millis() - _data.screensaver_last_weather_fetch_ms > SCREENSAVER_WEATHER_REFRESH_MS)
-        {
-            _fetch_weather();
-            _data.screensaver_last_weather_fetch_ms = millis();
-        }
-
         /* Refresh the displayed clock once a second while idle */
         if (millis() - _data.screensaver_last_render_ms >= 1000)
         {
@@ -436,8 +346,6 @@ void Launcher::_screensaver_tick()
         _data.screensaver_on = true;
         _data.screensaver_started_ms = millis();
         _data.screen_off = false;
-        _fetch_weather();
-        _data.screensaver_last_weather_fetch_ms = millis();
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
     }

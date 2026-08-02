@@ -3,7 +3,7 @@
  * @brief One-shot HTTP client for the user's email-status-server
  * (part of hermes-mcp-xiaozhi). No persistent connection - called
  * once per app open, not continuously polled, same reasoning as
- * STOCK_CLIENT/WEATHER_CLIENT.
+ * STOCK_CLIENT.
  */
 #pragma once
 #include <string>

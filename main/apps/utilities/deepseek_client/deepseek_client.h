@@ -3,7 +3,7 @@
  * @brief One-shot HTTP client for the DeepSeek account balance,
  * proxied through hermes-mcp-xiaozhi. No persistent connection -
  * called once per app open, not continuously polled, same reasoning
- * as STOCK_CLIENT/WEATHER_CLIENT/EMAIL_CLIENT.
+ * as STOCK_CLIENT/EMAIL_CLIENT.
  */
 #pragma once
 #include <string>
