@@ -240,10 +240,13 @@ void Launcher::_screensaver_render()
     /* Unread-mail indicator above the clock - hand-drawn white line
        envelope (no icon bitmap: the stock icon_email has a solid blue
        background that clashes with the black screensaver). 2px strokes:
-       rounded feel, still crisp on the round panel. Blinks at 0.5Hz
-       (screensaver refreshes once per second, so even/odd seconds) to
-       be noticeable without being annoying. */
-    if (_data.mail_unread > 0 && (time_now.tm_sec % 2) == 0)
+       rounded feel, still crisp on the round panel. Blinks by toggling
+       every render frame - NOT via tm_sec parity, because the render
+       cadence can phase-lock to wall-clock seconds (every render
+       landing on the same parity = icon stuck on). */
+    static uint32_t s_render_frame = 0;
+    const bool blink_on = (s_render_frame++ % 2) == 0;
+    if (_data.mail_unread > 0 && blink_on)
     {
         auto* cv = _data.hal->canvas;
         const int x0 = 110, y0 = 18, w = 20, h = 16; /* center (120,26) */
