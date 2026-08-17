@@ -52,11 +52,19 @@ namespace MOONCAKE
                 uint32_t screensaver_started_ms = 0;
 
                 /* Screensaver data: weather (slow poll) + unread mail
-                   (faster poll, drives the blue ring + mail icon) */
+                   (faster poll, drives the blue ring + mail icon).
+                   Fetched by _data_worker_task - NEVER on the launcher
+                   task: on a degraded WiFi link lwip send() can block
+                   for minutes (esp_http timeout_ms only covers reads),
+                   which froze the whole screensaver UI including the
+                   clock. */
                 WEATHER_CLIENT::WeatherInfo weather;
                 uint32_t weather_last_poll_ms = 0;
                 int mail_unread = 0;
                 uint32_t mail_last_poll_ms = 0;
+                /* Set by the launcher to request an immediate poll at
+                   screensaver entry; cleared by the worker. */
+                volatile bool force_poll = false;
             };
         }
 
@@ -75,6 +83,13 @@ namespace MOONCAKE
 
                 void _screensaver_tick();
                 void _screensaver_render();
+
+                /* Guards Data_t::weather / mail_* across the worker task
+                   and the renderer. */
+                void* _data_lock = nullptr;   /* SemaphoreHandle_t, kept as
+                                                 void* to keep the header
+                                                 FreeRTOS-clean */
+                static void _data_worker_task(void* arg);
 
             public:
                 Launcher() = default;

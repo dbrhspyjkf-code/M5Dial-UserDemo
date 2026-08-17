@@ -13,6 +13,9 @@
 #include "../utilities/idle_screen/idle_screen.h"
 #include "../utilities/weather_client/weather_client_config.h"
 #include "../utilities/ntp_sync/ntp_sync.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 #include <ctime>
 #include "esp_system.h"
 
@@ -209,6 +212,26 @@ void Launcher::_screensaver_render()
     struct tm time_now;
     _data.hal->rtc.getTime(time_now);
 
+    /* Snapshot the worker-owned data under the lock, then render from
+       the copy - no std::string access races with _data_worker_task. */
+    WEATHER_CLIENT::WeatherInfo weather;
+    int mail_unread = 0;
+    {
+        if (xSemaphoreTake((SemaphoreHandle_t)_data_lock, pdMS_TO_TICKS(50)) == pdTRUE)
+        {
+            weather = _data.weather;
+            mail_unread = mail_unread;
+            xSemaphoreGive((SemaphoreHandle_t)_data_lock);
+        }
+        else
+        {
+            /* Lock busy (worker writing) - reuse nothing, render a
+               neutral frame rather than blocking the UI tick. */
+            weather.ok = false;
+            mail_unread = 0;
+        }
+    }
+
     char time_buf[8];
     snprintf(time_buf, sizeof(time_buf), "%02d:%02d", time_now.tm_hour, time_now.tm_min);
 
@@ -246,7 +269,7 @@ void Launcher::_screensaver_render()
        landing on the same parity = icon stuck on). */
     static uint32_t s_render_frame = 0;
     const bool blink_on = (s_render_frame++ % 2) == 0;
-    if (_data.mail_unread > 0 && blink_on)
+    if (mail_unread > 0 && blink_on)
     {
         auto* cv = _data.hal->canvas;
         const int x0 = 110, y0 = 18, w = 20, h = 16; /* center (120,26) */
@@ -263,26 +286,26 @@ void Launcher::_screensaver_render()
     }
 
     /* Weather block (CJK-capable font - city/condition are Chinese) */
-    if (_data.weather.ok)
+    if (weather.ok)
     {
         _data.hal->canvas->setFont(GUI_FONT_CN_SMALL);
         _data.hal->canvas->setTextSize(1);
 
         char line1[48];
-        snprintf(line1, sizeof(line1), "%s %s°C", _data.weather.condition.c_str(), _data.weather.temp_c.c_str());
+        snprintf(line1, sizeof(line1), "%s %s°C", weather.condition.c_str(), weather.temp_c.c_str());
         _data.hal->canvas->drawCenterString(line1, 120, 116);
 
-        if (!_data.weather.city.empty() || !_data.weather.humidity.empty())
+        if (!weather.city.empty() || !weather.humidity.empty())
         {
             char line2[48];
-            snprintf(line2, sizeof(line2), "%s 湿度 %s%%", _data.weather.city.c_str(), _data.weather.humidity.c_str());
+            snprintf(line2, sizeof(line2), "%s 湿度 %s%%", weather.city.c_str(), weather.humidity.c_str());
             _data.hal->canvas->drawCenterString(line2, 120, 140);
         }
 
-        if (!_data.weather.feels_like_c.empty())
+        if (!weather.feels_like_c.empty())
         {
             char line3[48];
-            snprintf(line3, sizeof(line3), "体感 %s°C", _data.weather.feels_like_c.c_str());
+            snprintf(line3, sizeof(line3), "体感 %s°C", weather.feels_like_c.c_str());
             _data.hal->canvas->drawCenterString(line3, 120, 164);
         }
     }
@@ -295,7 +318,7 @@ void Launcher::_screensaver_render()
     /* Mail-unread ring: solid blue full circle when there is unread
        mail, nothing otherwise (no proportional meaning - purely a
        status flag at the screen edge, same 5-layer AA as before). */
-    if (_data.mail_unread > 0)
+    if (mail_unread > 0)
     {
         const uint16_t fill_color = TFT_BLUE;
         uint16_t c1 = (uint16_t)(fill_color >> 3) & 0x18E3;  /* 12.5% */
@@ -391,16 +414,9 @@ void Launcher::_screensaver_tick()
     {
         _data.screensaver_on = true;
         _data.screensaver_started_ms = millis();
-        /* Force immediate data fetch on screensaver entry */
-        _data.weather = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
-        _data.weather_last_poll_ms = millis();
-        {
-            auto folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
-            int unread = 0;
-            for (auto& f : folders) unread += f.unread;
-            _data.mail_unread = unread;
-            _data.mail_last_poll_ms = millis();
-        }
+        /* Ask the data worker for an immediate poll (non-blocking -
+           see Data_t::weather). */
+        _data.force_poll = true;
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
     }
@@ -632,6 +648,79 @@ void Launcher::onCreate()
     
     _launcher_init();
     _data.menu->getSelector()->reset(millis());
+
+    /* Start the background data worker (weather + unread mail). See
+       Data_t::weather for why this must NOT run on the launcher task. */
+    _data_lock = xSemaphoreCreateMutex();
+    if (_data_lock == nullptr)
+    {
+        ESP_LOGE(_tag, "failed to create data lock");
+        return;
+    }
+    if (xTaskCreate(_data_worker_task, "data_worker", 8192, this, 5, nullptr) != pdPASS)
+        ESP_LOGE(_tag, "failed to create data worker");
+}
+
+void Launcher::_data_worker_task(void* arg)
+{
+    auto* self = (Launcher*)arg;
+    auto& data = self->_data;
+
+    while (true)
+    {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        /* Weather: 10 minutes when healthy, 30s retry while failing.
+           Mail: 2 minutes. force_poll pulls both immediately
+           (screensaver entry). */
+        bool force;
+        {
+            /* Also take the lock for the flag clear - tiny window but
+               keep it clean vs the launcher setting it meanwhile. */
+            if (xSemaphoreTake((SemaphoreHandle_t)self->_data_lock, pdMS_TO_TICKS(100)) != pdTRUE)
+                continue;
+            force = data.force_poll;
+            data.force_poll = false;
+            xSemaphoreGive((SemaphoreHandle_t)self->_data_lock);
+        }
+
+        uint32_t now = millis();
+        uint32_t weather_period = 600000;
+        bool weather_ok;
+        {
+            if (xSemaphoreTake((SemaphoreHandle_t)self->_data_lock, pdMS_TO_TICKS(100)) != pdTRUE)
+                continue;
+            weather_ok = data.weather.ok;
+            xSemaphoreGive((SemaphoreHandle_t)self->_data_lock);
+        }
+        if (!weather_ok)
+            weather_period = 30000;
+
+        if (force || now - data.weather_last_poll_ms > weather_period)
+        {
+            auto w = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
+            if (xSemaphoreTake((SemaphoreHandle_t)self->_data_lock, portMAX_DELAY) == pdTRUE)
+            {
+                data.weather = w;
+                data.weather_last_poll_ms = millis();
+                xSemaphoreGive((SemaphoreHandle_t)self->_data_lock);
+            }
+        }
+
+        if (force || now - data.mail_last_poll_ms > 120000)
+        {
+            auto folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
+            int unread = 0;
+            for (auto& f : folders)
+                unread += f.unread;
+            if (xSemaphoreTake((SemaphoreHandle_t)self->_data_lock, portMAX_DELAY) == pdTRUE)
+            {
+                data.mail_unread = unread;
+                data.mail_last_poll_ms = millis();
+                xSemaphoreGive((SemaphoreHandle_t)self->_data_lock);
+            }
+        }
+    }
 }
 
 
@@ -654,22 +743,8 @@ void Launcher::onRunning()
     /* Weather is slow-changing: refresh every 10 minutes - but on
        failure retry in 30s so a flaky WiFi link self-heals quickly
        instead of blanking the screensaver for a full cycle. Unread mail
-       can change any minute: refresh every 2 minutes. */
-    uint32_t weather_period_ms = _data.weather.ok ? 600000 : 30000;
-    if (millis() - _data.weather_last_poll_ms > weather_period_ms)
-    {
-        _data.weather = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
-        _data.weather_last_poll_ms = millis();
-    }
-
-    if (millis() - _data.mail_last_poll_ms > 120000)
-    {
-        auto folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
-        int unread = 0;
-        for (auto& f : folders) unread += f.unread;
-        _data.mail_unread = unread;
-        _data.mail_last_poll_ms = millis();
-    }
+       can change any minute: refresh every 2 minutes. Both polls run
+       on _data_worker_task - nothing network touches this task. */
 
     _screensaver_tick();
     if (!_data.screensaver_on)
