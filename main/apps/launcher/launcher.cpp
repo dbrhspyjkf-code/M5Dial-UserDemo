@@ -244,7 +244,7 @@ void Launcher::_screensaver_render()
     if (_data.mail_unread > 0)
     {
         auto* cv = _data.hal->canvas;
-        const int x0 = 103, y0 = 14, w = 34, h = 24; /* center (120,26) */
+        const int x0 = 110, y0 = 18, w = 20, h = 16; /* center (120,26) */
         cv->fillRect(x0, y0, w, 2, TFT_WHITE);          /* top */
         cv->fillRect(x0, y0 + h - 2, w, 2, TFT_WHITE);  /* bottom */
         cv->fillRect(x0, y0, 2, h, TFT_WHITE);          /* left */
