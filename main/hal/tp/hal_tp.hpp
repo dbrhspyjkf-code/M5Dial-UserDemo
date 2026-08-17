@@ -353,16 +353,14 @@ namespace FT3267
                     /* L1 and L2 both failed. Stop trying - the earlier L3
                        (LCD_RST pulse) left the GC9A01 panel permanently
                        black because LovyanGFX doesn't re-init the panel
-                       after a hardware reset. Rather than add a
-                       display-reinit path into the TP driver, we hand off
-                       to the user: hold the encoder button 3s to reboot.
-                       Terminal state - s_heal_lvl stays at 3 until a real
-                       touch event comes in (then resets to 0 in the
-                       touch-recovered branch above). */
+                       after a hardware reset. A full restart is the only
+                       observed safe recovery path from this terminal state. */
                     s_heal_lvl = 3;
                     _dump_status("ladder-exhausted");
                     ESP_LOGE(TAG, "[TP-DIAG] heal ladder exhausted: L1 and L2 "
-                                  "both failed. Hold encoder button 3s to reboot.");
+                                  "both failed. Restarting device.");
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    esp_restart();
                 }
             }
 
