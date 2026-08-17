@@ -26,7 +26,9 @@
 #include "../app_ble_server/app_ble_server.h"
 #include "../app_timer/app_timer.h"
 #include "../app_sonos/app_sonos.h"
-#include "../utilities/codex_client/codex_client.h"
+#include "../utilities/weather_client/weather_client.h"
+#include "../utilities/email_client/email_client.h"
+#include "../app_ble_server/email_config.h"
 
 
 namespace MOONCAKE
@@ -49,9 +51,12 @@ namespace MOONCAKE
 
                 uint32_t screensaver_started_ms = 0;
 
-                /* Codex usage, polled every 60s */
-                CODEX_CLIENT::Usage codex_usage;
-                uint32_t codex_last_poll_ms = 0;
+                /* Screensaver data: weather (slow poll) + unread mail
+                   (faster poll, drives the blue ring + mail icon) */
+                WEATHER_CLIENT::WeatherInfo weather;
+                uint32_t weather_last_poll_ms = 0;
+                int mail_unread = 0;
+                uint32_t mail_last_poll_ms = 0;
             };
         }
 

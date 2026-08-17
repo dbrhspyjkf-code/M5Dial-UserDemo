@@ -11,7 +11,7 @@
 #include "launcher.h"
 #include "../common_define.h"
 #include "../utilities/idle_screen/idle_screen.h"
-#include "../utilities/codex_client/codex_client_config.h"
+#include "../utilities/weather_client/weather_client_config.h"
 #include "../utilities/ntp_sync/ntp_sync.h"
 #include <ctime>
 #include "esp_system.h"
@@ -231,47 +231,61 @@ void Launcher::_screensaver_render()
     _data.hal->canvas->setTextColor(TFT_WHITE);
     _data.hal->canvas->setTextSize(4);
     int time_h = _data.hal->canvas->fontHeight();
-    _data.hal->canvas->drawCenterString(time_buf, 120, 55 - time_h / 2);
+    _data.hal->canvas->drawCenterString(time_buf, 120, 68 - time_h / 2);
 
     /* Date */
     _data.hal->canvas->setTextSize(2);
-    _data.hal->canvas->drawCenterString(date_buf, 120, 80);
+    _data.hal->canvas->drawCenterString(date_buf, 120, 90);
 
-    /* Codex usage */
-    _data.hal->canvas->drawCenterString("Codex usage", 120, 110);
+    /* Unread-mail icon above the clock (42x42 RGB565) - only when there
+       is unread mail, per the screensaver spec. */
+    if (_data.mail_unread > 0)
+        _data.hal->canvas->pushImage(120 - 21, 5, 42, 42, image_data_icon_email);
 
-    if (_data.codex_usage.ok)
+    /* Weather block (CJK-capable font - city/condition are Chinese) */
+    if (_data.weather.ok)
     {
-        /* Ring progress at screen edge */
-        float used = _data.codex_usage.used;
-        float progress_angle = -90.0f + used * 3.6f;  /* -90=top, 360° clockwise */
+        _data.hal->canvas->setFont(GUI_FONT_CN_SMALL);
+        _data.hal->canvas->setTextSize(1);
 
-        uint16_t fill_color = TFT_GREEN;
-        if (used > 80.0f)      fill_color = TFT_RED;
-        else if (used > 50.0f) fill_color = TFT_ORANGE;
+        char line1[48];
+        snprintf(line1, sizeof(line1), "%s %s°C", _data.weather.condition.c_str(), _data.weather.temp_c.c_str());
+        _data.hal->canvas->drawCenterString(line1, 120, 116);
 
-        /* Anti-alias: 5-layer smooth gradient (outer→inner) */
-        uint16_t c1 = (uint16_t)(fill_color >> 3) & 0x18E3;  /* 12.5% */
-        uint16_t c2 = (uint16_t)(fill_color >> 2) & 0x39E7;  /* 25% */
-        uint16_t c3 = (uint16_t)(fill_color >> 1) & 0x7BEF;  /* 50% */
-        _data.hal->canvas->fillArc(120, 120, 118, 119, -90, progress_angle, c1);
-        _data.hal->canvas->fillArc(120, 120, 117, 118, -90, progress_angle, c2);
-        _data.hal->canvas->fillArc(120, 120, 116, 117, -90, progress_angle, c3);
-        _data.hal->canvas->fillArc(120, 120, 115, 116, -90, progress_angle, (uint16_t)(c3 | c2));
-        _data.hal->canvas->fillArc(120, 120, 114, 115, -90, progress_angle, fill_color);
+        if (!_data.weather.city.empty() || !_data.weather.humidity.empty())
+        {
+            char line2[48];
+            snprintf(line2, sizeof(line2), "%s 湿度 %s%%", _data.weather.city.c_str(), _data.weather.humidity.c_str());
+            _data.hal->canvas->drawCenterString(line2, 120, 140);
+        }
 
-        char usage_buf[16];
-        snprintf(usage_buf, sizeof(usage_buf), "%.0f%% used", used);
-        _data.hal->canvas->drawCenterString(usage_buf, 120, 140);
-
-        char reset_buf[32];
-        snprintf(reset_buf, sizeof(reset_buf), "%s", _data.codex_usage.reset.c_str());
-        _data.hal->canvas->drawCenterString(reset_buf, 120, 170);
-        _data.hal->canvas->drawCenterString("Reset", 120, 200);
+        if (!_data.weather.feels_like_c.empty())
+        {
+            char line3[48];
+            snprintf(line3, sizeof(line3), "体感 %s°C", _data.weather.feels_like_c.c_str());
+            _data.hal->canvas->drawCenterString(line3, 120, 164);
+        }
     }
     else
     {
-        _data.hal->canvas->drawCenterString("--", 120, 160);
+        _data.hal->canvas->setTextSize(2);
+        _data.hal->canvas->drawCenterString("--", 120, 130);
+    }
+
+    /* Mail-unread ring: solid blue full circle when there is unread
+       mail, nothing otherwise (no proportional meaning - purely a
+       status flag at the screen edge, same 5-layer AA as before). */
+    if (_data.mail_unread > 0)
+    {
+        const uint16_t fill_color = TFT_BLUE;
+        uint16_t c1 = (uint16_t)(fill_color >> 3) & 0x18E3;  /* 12.5% */
+        uint16_t c2 = (uint16_t)(fill_color >> 2) & 0x39E7;  /* 25% */
+        uint16_t c3 = (uint16_t)(fill_color >> 1) & 0x7BEF;  /* 50% */
+        _data.hal->canvas->fillArc(120, 120, 118, 119, -90, 270, c1);
+        _data.hal->canvas->fillArc(120, 120, 117, 118, -90, 270, c2);
+        _data.hal->canvas->fillArc(120, 120, 116, 117, -90, 270, c3);
+        _data.hal->canvas->fillArc(120, 120, 115, 116, -90, 270, (uint16_t)(c3 | c2));
+        _data.hal->canvas->fillArc(120, 120, 114, 115, -90, 270, fill_color);
     }
 
     _data.hal->canvas->pushSprite(0, 0);
@@ -357,9 +371,16 @@ void Launcher::_screensaver_tick()
     {
         _data.screensaver_on = true;
         _data.screensaver_started_ms = millis();
-        /* Force immediate Codex fetch on screensaver entry */
-        _data.codex_usage = CODEX_CLIENT::fetch(CODEX_SERVER_URL);
-        _data.codex_last_poll_ms = millis();
+        /* Force immediate data fetch on screensaver entry */
+        _data.weather = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
+        _data.weather_last_poll_ms = millis();
+        {
+            auto folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
+            int unread = 0;
+            for (auto& f : folders) unread += f.unread;
+            _data.mail_unread = unread;
+            _data.mail_last_poll_ms = millis();
+        }
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
     }
@@ -610,11 +631,21 @@ void Launcher::onRunning()
         ntp_retry_ms = millis();
     }
 
-    /* Poll Codex usage every 60s */
-    if (millis() - _data.codex_last_poll_ms > 60000)
+    /* Weather is slow-changing: refresh every 10 minutes. Unread mail
+       can change any minute: refresh every 2 minutes. */
+    if (millis() - _data.weather_last_poll_ms > 600000)
     {
-        _data.codex_usage = CODEX_CLIENT::fetch(CODEX_SERVER_URL);
-        _data.codex_last_poll_ms = millis();
+        _data.weather = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
+        _data.weather_last_poll_ms = millis();
+    }
+
+    if (millis() - _data.mail_last_poll_ms > 120000)
+    {
+        auto folders = EMAIL_CLIENT::get_unread(EMAIL_API_BASE_URL);
+        int unread = 0;
+        for (auto& f : folders) unread += f.unread;
+        _data.mail_unread = unread;
+        _data.mail_last_poll_ms = millis();
     }
 
     _screensaver_tick();
