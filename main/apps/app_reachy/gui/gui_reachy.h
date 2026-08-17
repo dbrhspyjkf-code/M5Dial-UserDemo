@@ -16,7 +16,8 @@ class GUI_Reachy : public GUI_Base
         void renderChat(const std::string& user,
                         const std::string& assistant,
                         int volume_percent = -1,
-                        bool mic_auto_on = false);
+                        /* 0 = no flash, 1 = flash MIC ON (green), 2 = MIC OFF (red) */
+                        int mic_flash = 0);
         void renderAudio(const REACHY_CLIENT::AudioState& audio,
                          int edit_mode);
         void renderSystem(const std::string& status);

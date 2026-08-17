@@ -103,8 +103,9 @@ void AppReachy::_render()
         case REACHY::CHAT:
             _gui.renderChat(_data.turn.user, _data.turn.assistant,
                             _data.volume_dirty ? _data.audio.volume_percent : -1,
-                            _data.mic_auto_on_ms != 0 &&
-                                millis() - _data.mic_auto_on_ms < 2000);
+                            (_data.mic_auto_on_ms != 0 &&
+                                millis() - _data.mic_auto_on_ms < 2000)
+                                ? (_data.mic_flash_off ? 2 : 1) : 0);
             break;
         case REACHY::AUDIO:
             _gui.renderAudio(_data.audio, _data.audio_edit);
@@ -177,6 +178,7 @@ void AppReachy::_ensure_mic_enabled()
     {
         _data.audio.mic_enabled = true;
         _data.mic_auto_on_ms = millis();
+        _data.mic_flash_off = false;
         _data.status = "mic auto-on";
         _log("mic auto-on (volume adjusted on Chat)");
     }
@@ -199,6 +201,10 @@ void AppReachy::_toggle_mic()
     _data.audio.mic_enabled = !_data.audio.mic_enabled;
     auto result = REACHY_CLIENT::set_mic_enabled(REACHY_BASE_URL, _data.audio.mic_enabled);
     _data.status = result.ok ? "mic ok" : "mic fail";
+    /* Flash MIC ON/OFF on the chat page for 2s so tapping the header
+       icon from any page gives visible feedback */
+    _data.mic_auto_on_ms = millis();
+    _data.mic_flash_off = !_data.audio.mic_enabled;
     _render();
 }
 
@@ -342,6 +348,16 @@ void AppReachy::_handle_touch()
                 _render();
             }
         }
+        return;
+    }
+
+    /* Header icon = mic toggle, available on every page. The icon is
+       drawn centered at (120, 27) zoomed 1.2x; give it a generous tap
+       target that stays clear of the page-flip side zones (x<55/>185)
+       and of the first content row (y>=58). */
+    if (x >= 84 && x <= 156 && y <= 54)
+    {
+        _toggle_mic();
         return;
     }
 
