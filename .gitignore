@@ -15,3 +15,5 @@ main/apps/launcher/screensaver_config.h
 main/apps/app_ble_server/email_config.h
 main/apps/app_wifi_scan/deepseek_config.h
 
+
+.DS_Store
