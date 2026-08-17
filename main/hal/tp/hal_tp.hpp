@@ -13,6 +13,7 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <esp_err.h>
+#include <esp_system.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -398,9 +399,12 @@ namespace FT3267
                 _data_buffer[0] = 0;
                 esp_err_t err = _read_reg(FT5x06_TOUCH_POINTS, 1);
                 uint8_t raw = _data_buffer[0];   // save before _maintenance clobbers _data_buffer
-                _diag(err, raw & 0x0F);
-                _maintenance(raw & 0x0F);
-                return raw;
+                uint8_t touch_num = (err == ESP_OK) ? (raw & 0x0F) : 0;
+                if (touch_num > 5)
+                    touch_num = 0;  /* FT5x06 max 5 points - garbage means the read lied */
+                _diag(err, touch_num);
+                _maintenance(touch_num);
+                return touch_num;
             }
 
 
