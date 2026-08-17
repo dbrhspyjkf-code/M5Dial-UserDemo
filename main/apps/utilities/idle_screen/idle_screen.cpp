@@ -93,6 +93,13 @@ namespace IDLE_SCREEN
             s_screen_on = false;
         }
 
+        /* Stay dark: anything that re-initializes the display (e.g. the
+           TP driver's L3 hardware-reset heal re-running display.init())
+           restores default brightness, so re-assert screen-off every tick.
+           Idempotent and cheap. */
+        if (!s_screen_on && _is_night(hal))
+            hal->display.setBrightness(0);
+
         return false;
     }
 }

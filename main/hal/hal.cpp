@@ -25,6 +25,16 @@ namespace HAL
         ESP_LOGI(TAG, "display init");
         display.init();
 
+        /* L3' heal callback: re-running display.init() pulses LCD_RST
+           (shared with the FT3267 touch controller) and re-sends the
+           GC9A01 panel init sequence - recovers both chips without a
+           reboot. Brightness is restored to the daytime default; the
+           night idle-screen re-asserts brightness 0 on its next tick. */
+        tp.setDisplayReinitCallback([this]() {
+            display.init();
+            display.setBrightness(128);
+        });
+
         /* Init tp right after lcd (sharing rst pin) */
         tp.init();
         i2c_scan(I2C_NUM_0);

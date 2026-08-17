@@ -14,12 +14,12 @@
 #include <esp_timer.h>
 #include <esp_err.h>
 #include <esp_system.h>
-#include <esp_rom_sys.h>
 #include <esp_wifi.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cstring>
+#include <functional>
 
 
 /** @brief FT5x06 register map and function codes */
@@ -110,10 +110,6 @@ namespace FT3267
     {
         i2c_port_t i2c_port = I2C_NUM_0;
         uint8_t dev_addr = FT5x06_ADDR;
-        /* Needed by the bus-recovery path so it can bit-bang the pins
-           after tearing the driver down (M5Dial: SDA=11 SCL=12). */
-        int sda_pin = 11;
-        int scl_pin = 12;
     };
 
 
@@ -126,13 +122,20 @@ namespace FT3267
 
             /* Shared with _maintenance (was a function-local static before
                the bus-recovery path needed to reset it). */
-            static inline int s_heal_lvl = 0;      /* 0=idle, 1=L1 done, 2=L2 done, 3=exhausted */
+            static inline int s_heal_lvl = 0;      /* 0=idle ... 5=reboot */
             static inline uint32_t s_consec_fail = 0;
             static inline uint32_t s_last_recover_ms = 0;
             /* Set when a deep NACK spell was seen; the first FAIL->OK
                transition afterwards is the rescue window - the controller
                ACKs again, but its scan engine may already be wedged. */
             static inline bool s_rescue_pending = false;
+
+            /* L3': hardware-reset heal. The FT3267 RST line is wired to
+               LCD_RST (GPIO8), which LovyanGFX also drives - re-running
+               display.init() produces the RST pulse AND re-sends the
+               GC9A01 panel init sequence, fixing both chips at once.
+               Registered by HAL (keeps this driver display-agnostic). */
+            std::function<void()> _display_reinit_cb;
 
 
             /* The FT3267 periodically stops ACKing for a few ms (~3.4s
@@ -172,108 +175,35 @@ namespace FT3267
             }
 
 
-            /* Standard I2C bus recovery: when a slave hangs mid-transaction
-               it can hold SDA low indefinitely, which makes every driver
-               transaction fail immediately (the ESP_FAIL bursts seen in
-               TP-DIAG logs). Clocking SCL 9 times lets the slave finish
-               whatever it was doing, then a STOP condition releases the
-               bus. Much cheaper than the previous last resort (rebooting
-               the whole device) and observed to precede the full
-               G_MODE=0x00 scan-engine hang, so clearing it early may
-               prevent the controller from wedging at all. */
-            inline void _i2c_bus_recover()
+            /* Deep NACK spell handling. The original plan (tearing the
+               I2C driver down and bit-banging 9 SCL pulses) crashed the
+               RC522 task: legacy i2c_driver_delete() is not concurrency-
+               safe and the RFID reader polls the same port every ~125ms,
+               so it raced into freed driver state (LoadProhibited).
+               Since live captures show SDA is NEVER actually held low
+               (every recovery attempt found the bus already released),
+               the teardown was a no-op solving a problem that does not
+               exist on this hardware. Keep it simple: mark a rescue-
+               pending flag and let _rescue_on_ack_return() do the real
+               work in the ACK window. A genuinely stuck bus would still
+               escalate through the heal ladder to L3/reboot. */
+            inline void _note_nack_spell()
             {
-                static bool s_recovering = false;
-                if (s_recovering)
-                    return;
-
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
                 if (s_last_recover_ms != 0 && now_ms - s_last_recover_ms < 10000)
                 {
-                    /* Cooldown: keep counting but don't hammer the bus with
-                       reinstalls if the failure is persistent. */
+                    /* Cooldown suppresses only the log - still flag the
+                       spell so the rescue check is never missed. */
+                    s_rescue_pending = true;
                     return;
                 }
 
-                s_recovering = true;
                 s_last_recover_ms = now_ms;
-                uint32_t fails = s_consec_fail;
-                s_consec_fail = 0;
-
+                s_rescue_pending = true;
                 ESP_LOGW(TAG, "[TP-DIAG] %lu consecutive i2c failures - "
-                              "running bus recovery (9 SCL pulses + STOP)", (unsigned long)fails);
-
-                int sda = _cfg.sda_pin;
-                int scl = _cfg.scl_pin;
-
-                /* Tear the driver down so we own the pins. Other tasks
-                   (RC522, RTC) calling the port meanwhile just get
-                   INVALID_STATE for one round and retry - acceptable. */
-                i2c_driver_delete(_cfg.i2c_port);
-
-                gpio_reset_pin((gpio_num_t)sda);
-                gpio_reset_pin((gpio_num_t)scl);
-                gpio_set_direction((gpio_num_t)sda, GPIO_MODE_INPUT_OUTPUT_OD);
-                gpio_set_direction((gpio_num_t)scl, GPIO_MODE_INPUT_OUTPUT_OD);
-                gpio_set_pull_mode((gpio_num_t)sda, GPIO_PULLUP_ONLY);
-                gpio_set_pull_mode((gpio_num_t)scl, GPIO_PULLUP_ONLY);
-                gpio_set_level((gpio_num_t)sda, 1);
-                gpio_set_level((gpio_num_t)scl, 1);
-                vTaskDelay(pdMS_TO_TICKS(2));
-
-                bool sda_released = (gpio_get_level((gpio_num_t)sda) == 1);
-                ESP_LOGW(TAG, "[TP-DIAG] bus recovery: SDA %s after driver teardown",
-                         sda_released ? "already released" : "held low - clocking out");
-
-                if (!sda_released)
-                {
-                    for (int i = 0; i < 9; i++)
-                    {
-                        gpio_set_level((gpio_num_t)scl, 0);
-                        esp_rom_delay_us(5);
-                        gpio_set_level((gpio_num_t)scl, 1);
-                        esp_rom_delay_us(5);
-                        if (gpio_get_level((gpio_num_t)sda) == 1)
-                        {
-                            sda_released = true;
-                            ESP_LOGW(TAG, "[TP-DIAG] SDA released after %d SCL pulses", i + 1);
-                            break;
-                        }
-                    }
-
-                    /* STOP: SDA low -> high while SCL stays high */
-                    gpio_set_level((gpio_num_t)sda, 0);
-                    esp_rom_delay_us(5);
-                    gpio_set_level((gpio_num_t)scl, 1);
-                    esp_rom_delay_us(5);
-                    gpio_set_level((gpio_num_t)sda, 1);
-                    esp_rom_delay_us(5);
-
-                    if (!sda_released)
-                        ESP_LOGE(TAG, "[TP-DIAG] SDA still held low after 9 pulses - "
-                                      "slave may need a power cycle");
-                }
-
-                /* Reinstall the driver with the same configuration as hal.cpp */
-                i2c_config_t conf;
-                memset(&conf, 0, sizeof(i2c_config_t));
-                conf.mode = I2C_MODE_MASTER;
-                conf.sda_io_num = (gpio_num_t)sda;
-                conf.scl_io_num = (gpio_num_t)scl;
-                conf.master.clk_speed = 100000;
-                conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-                conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-                conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
-                i2c_param_config(_cfg.i2c_port, &conf);
-                i2c_driver_install(_cfg.i2c_port, I2C_MODE_MASTER, 0, 0, 0);
-
-                /* Fresh bus, fresh controller - give the heal ladder a
-                   clean slate so L1/L2 get another chance before any reboot. */
-                s_heal_lvl = 0;
-                _tp_init();
-                _dump_status("post-bus-recovery");
-
-                s_recovering = false;
+                              "deep NACK spell, will check engine on ACK return",
+                         (unsigned long)s_consec_fail);
+                s_consec_fail = 0;
             }
 
 
@@ -296,10 +226,7 @@ namespace FT3267
                     s_consec_fail = 0;
                 }
                 else if (++s_consec_fail >= 5)
-                {
-                    s_rescue_pending = true;
-                    _i2c_bus_recover();
-                }
+                    _note_nack_spell();
                 return err;
             }
 
@@ -526,17 +453,52 @@ namespace FT3267
                     _tp_init();
                     ESP_LOGW(TAG, "[TP-DIAG] heal L2 fired (DEVICE_MODE soft reset)");
                 }
+                else if (s_heal_lvl < 3)
+                {
+                    /* L3': the earlier plain-L3 (LCD_RST pulse without panel
+                       re-init) permanently blacked the GC9A01 because
+                       LovyanGFX never re-ran its init sequence. Re-running
+                       display.init() fixes that: it pulses RST (resetting
+                       BOTH the panel and the FT3267 on the shared line) and
+                       re-sends the panel init commands. Screen blanks for
+                       ~200ms - vastly better than the device reboot that
+                       used to be the next step. */
+                    s_heal_lvl = 3;
+                    _dump_status("pre-L3");
+                    if (_display_reinit_cb)
+                    {
+                        _display_reinit_cb();
+                        _tp_init();
+                        ESP_LOGW(TAG, "[TP-DIAG] heal L3 fired "
+                                      "(LCD_RST pulse + display re-init)");
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG, "[TP-DIAG] L3 skipped - no display "
+                                      "re-init callback registered");
+                    }
+                }
+                else if (s_heal_lvl < 4)
+                {
+                    /* One L3 retry on the next maintenance interval before
+                       giving up on the hardware entirely. */
+                    s_heal_lvl = 4;
+                    _dump_status("pre-L3-retry");
+                    if (_display_reinit_cb)
+                    {
+                        _display_reinit_cb();
+                        _tp_init();
+                        ESP_LOGW(TAG, "[TP-DIAG] heal L3 retry fired");
+                    }
+                }
                 else
                 {
-                    /* L1 and L2 both failed. Stop trying - the earlier L3
-                       (LCD_RST pulse) left the GC9A01 panel permanently
-                       black because LovyanGFX doesn't re-init the panel
-                       after a hardware reset. A full restart is the only
-                       observed safe recovery path from this terminal state. */
-                    s_heal_lvl = 3;
+                    /* Genuinely terminal: L1/L2/L3/L3-retry all failed.
+                       Reboot is the last resort. */
+                    s_heal_lvl = 5;
                     _dump_status("ladder-exhausted");
-                    ESP_LOGE(TAG, "[TP-DIAG] heal ladder exhausted: L1 and L2 "
-                                  "both failed. Restarting device.");
+                    ESP_LOGE(TAG, "[TP-DIAG] heal ladder exhausted: L1/L2/L3 "
+                                  "all failed. Restarting device.");
                     vTaskDelay(pdMS_TO_TICKS(500));
                     esp_restart();
                 }
@@ -554,6 +516,10 @@ namespace FT3267
             /* Config */
             inline Config_t getConfig() { return _cfg; }
             inline void setConfig(const Config_t& cfg) { _cfg = cfg; }
+            inline void setDisplayReinitCallback(std::function<void()> cb)
+            {
+                _display_reinit_cb = cb;
+            }
 
 
             inline bool init()
