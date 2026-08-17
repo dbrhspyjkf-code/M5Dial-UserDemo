@@ -125,6 +125,7 @@ void AppTimer::_handle_touch()
             case State::DONE:
                 _data.state = State::EDIT;
                 _data.blink_on = true;
+                _data.hal->buzz.noTone();
                 break;
         }
         _render();
@@ -154,7 +155,10 @@ void AppTimer::_handle_tick()
                 _data.state = State::DONE;
                 _data.blink_on = true;
                 _data.last_blink_ms = millis();
-                _data.hal->buzz.tone(4000, 200);
+                /* Start 5-beep sequence: 150ms tone, 150ms gap = 300ms cycle */
+                _data.beep_count = 0;
+                _data.last_beep_ms = millis() - 300;  /* fire immediately */
+                _data.beep_on = false;
             }
 
             _render();
@@ -162,6 +166,18 @@ void AppTimer::_handle_tick()
     }
     else if (_data.state == State::DONE)
     {
+        /* 5-beep sequence: each beep auto-stops after 150ms via tone() */
+        if (_data.beep_count < 5)
+        {
+            if (millis() - _data.last_beep_ms >= 300)
+            {
+                _data.last_beep_ms = millis();
+                _data.beep_count++;
+                _data.hal->buzz.tone(4000, 150);
+            }
+        }
+
+        /* Blink digits */
         if (millis() - _data.last_blink_ms >= 500)
         {
             _data.last_blink_ms = millis();

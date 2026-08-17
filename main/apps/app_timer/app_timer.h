@@ -36,6 +36,11 @@ namespace MOONCAKE
                 uint32_t last_tick_ms = 0;
                 uint32_t last_blink_ms = 0;
                 bool blink_on = true;
+
+                /* 5-beep sequence on timer end */
+                int beep_count = 0;
+                uint32_t last_beep_ms = 0;
+                bool beep_on = false;
             };
         }
 
