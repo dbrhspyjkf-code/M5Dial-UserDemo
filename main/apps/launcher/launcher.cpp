@@ -237,10 +237,25 @@ void Launcher::_screensaver_render()
     _data.hal->canvas->setTextSize(2);
     _data.hal->canvas->drawCenterString(date_buf, 120, 90);
 
-    /* Unread-mail icon above the clock (42x42 RGB565) - only when there
-       is unread mail, per the screensaver spec. */
+    /* Unread-mail indicator above the clock - hand-drawn white line
+       envelope (no icon bitmap: the stock icon_email has a solid blue
+       background that clashes with the black screensaver). 2px strokes:
+       rounded feel, still crisp on the round panel. */
     if (_data.mail_unread > 0)
-        _data.hal->canvas->pushImage(120 - 21, 5, 42, 42, image_data_icon_email);
+    {
+        auto* cv = _data.hal->canvas;
+        const int x0 = 103, y0 = 14, w = 34, h = 24; /* center (120,26) */
+        cv->fillRect(x0, y0, w, 2, TFT_WHITE);          /* top */
+        cv->fillRect(x0, y0 + h - 2, w, 2, TFT_WHITE);  /* bottom */
+        cv->fillRect(x0, y0, 2, h, TFT_WHITE);          /* left */
+        cv->fillRect(x0 + w - 2, y0, 2, h, TFT_WHITE);  /* right */
+        /* flap: two diagonals meeting at the low point, drawn twice with
+           a 1px offset for a matching 2px weight */
+        cv->drawLine(x0 + 2, y0 + 2, x0 + w / 2, y0 + h / 2 + 1, TFT_WHITE);
+        cv->drawLine(x0 + 2, y0 + 3, x0 + w / 2, y0 + h / 2 + 2, TFT_WHITE);
+        cv->drawLine(x0 + w - 3, y0 + 2, x0 + w / 2, y0 + h / 2 + 1, TFT_WHITE);
+        cv->drawLine(x0 + w - 3, y0 + 3, x0 + w / 2, y0 + h / 2 + 2, TFT_WHITE);
+    }
 
     /* Weather block (CJK-capable font - city/condition are Chinese) */
     if (_data.weather.ok)
