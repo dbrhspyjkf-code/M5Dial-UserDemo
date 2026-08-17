@@ -245,7 +245,7 @@ void Launcher::_screensaver_render()
     static const char* WEEKDAY_NAMES[7] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
     char date_buf[32];
     snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d %s",
-             time_now.tm_year, time_now.tm_mon + 1, time_now.tm_mday,
+             time_now.tm_year + 1900, time_now.tm_mon + 1, time_now.tm_mday,
              WEEKDAY_NAMES[time_now.tm_wday % 7]);
 
     _data.hal->canvas->fillScreen(TFT_BLACK);
