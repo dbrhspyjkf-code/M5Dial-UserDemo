@@ -47,7 +47,20 @@ python3 test/test_reachy_dial_contract.py
 
 ## Last Verified State
 
-2026-08-14:
+2026-08-17:
+
+- All pending work (Codex screensaver, timer beep, night idle, NTP fallback,
+  TP fix, smooth_menu goToItem, Reachy app) committed as 8 topic commits
+  (c136a8b..0713b4b) on top of a496aec.
+- sdkconfig NimBLE HID leftovers from the abandoned BLE-scroll experiment
+  reverted (CONFIG_BT_NIMBLE_HID_SERVICE / NVS_PERSIST back to unset).
+- `python3 test/test_reachy_dial_contract.py` passed with 15 tests.
+- `idf.py build` + flash on `/dev/cu.usbmodem11401` OK; boot log shows
+  WiFi connect, NTP sync, `launcher: onCreate`, no assert/reboot loop.
+- Note: `esptool chip-id --after no-reset` leaves the chip in ROM download
+  mode; always use `--after hard-reset` when probing the device.
+
+2026-08-14 (previous agent):
 
 - `python3 test/test_reachy_dial_contract.py` passed with 15 tests.
 - `idf.py build` passed.
