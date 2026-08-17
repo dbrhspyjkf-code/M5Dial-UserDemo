@@ -651,9 +651,12 @@ void Launcher::onRunning()
         ntp_retry_ms = millis();
     }
 
-    /* Weather is slow-changing: refresh every 10 minutes. Unread mail
+    /* Weather is slow-changing: refresh every 10 minutes - but on
+       failure retry in 30s so a flaky WiFi link self-heals quickly
+       instead of blanking the screensaver for a full cycle. Unread mail
        can change any minute: refresh every 2 minutes. */
-    if (millis() - _data.weather_last_poll_ms > 600000)
+    uint32_t weather_period_ms = _data.weather.ok ? 600000 : 30000;
+    if (millis() - _data.weather_last_poll_ms > weather_period_ms)
     {
         _data.weather = WEATHER_CLIENT::get_weather(WEATHER_SERVER_URL);
         _data.weather_last_poll_ms = millis();
