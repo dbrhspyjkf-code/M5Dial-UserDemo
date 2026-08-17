@@ -227,7 +227,7 @@ void Launcher::_screensaver_render()
         if (xSemaphoreTake((SemaphoreHandle_t)_data_lock, pdMS_TO_TICKS(50)) == pdTRUE)
         {
             weather = _data.weather;
-            mail_unread = mail_unread;
+            mail_unread = _data.mail_unread;
             xSemaphoreGive((SemaphoreHandle_t)_data_lock);
         }
         else
