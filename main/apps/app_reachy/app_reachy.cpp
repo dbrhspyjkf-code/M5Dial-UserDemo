@@ -102,7 +102,9 @@ void AppReachy::_render()
     {
         case REACHY::CHAT:
             _gui.renderChat(_data.turn.user, _data.turn.assistant,
-                            _data.volume_dirty ? _data.audio.volume_percent : -1);
+                            _data.volume_dirty ? _data.audio.volume_percent : -1,
+                            _data.mic_auto_on_ms != 0 &&
+                                millis() - _data.mic_auto_on_ms < 2000);
             break;
         case REACHY::AUDIO:
             _gui.renderAudio(_data.audio, _data.audio_edit);
@@ -170,9 +172,19 @@ void AppReachy::_ensure_mic_enabled()
 {
     if (_data.audio.mic_enabled)
         return;
-    _data.audio.mic_enabled = true;
     auto result = REACHY_CLIENT::set_mic_enabled(REACHY_BASE_URL, true);
-    _data.status = result.ok ? "mic ok" : "mic fail";
+    if (result.ok)
+    {
+        _data.audio.mic_enabled = true;
+        _data.mic_auto_on_ms = millis();
+        _data.status = "mic auto-on";
+        _log("mic auto-on (volume adjusted on Chat)");
+    }
+    else
+    {
+        /* Keep mic_enabled=false so the next volume turn retries. */
+        _data.status = "mic enable fail";
+    }
 }
 
 void AppReachy::_restart_yrobot()
@@ -250,6 +262,13 @@ void AppReachy::_handle_encoder()
     int direction = (_data.hal->encoder.getDirection() < 1) ? 1 : -1;
     if (_data.page == REACHY::CHAT)
     {
+        /* Keep the cached mic state honest: it defaults to enabled when
+           the fetch failed, and can go stale if MIC was toggled outside
+           the app. Skip the refresh while volume changes are pending so
+           we don't clobber the uncommitted local value. */
+        if (!_data.volume_dirty &&
+            (!_data.audio.ok || millis() - _data.last_audio_fetch_ms > AUDIO_POLL_MS))
+            _fetch_audio();
         _ensure_mic_enabled();
         _adjust_volume(direction);
         _render();

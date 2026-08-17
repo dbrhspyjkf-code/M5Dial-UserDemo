@@ -54,6 +54,7 @@ namespace MOONCAKE
                 uint32_t last_video_fetch_ms = 0;
                 uint32_t last_frame_fetch_ms = 0;
                 uint32_t last_audio_change_ms = 0;
+                uint32_t mic_auto_on_ms = 0;
                 bool volume_dirty = false;
                 bool vad_dirty = false;
                 bool restart_confirm = false;

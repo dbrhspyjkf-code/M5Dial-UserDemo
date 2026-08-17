@@ -83,7 +83,8 @@ static void _draw_edge_progress(LGFX_Sprite* canvas, int percent)
 
 void GUI_Reachy::renderChat(const std::string& user,
                             const std::string& assistant,
-                            int volume_percent)
+                            int volume_percent,
+                            bool mic_auto_on)
 {
     _canvas->fillScreen(TFT_BLACK);
     _icon->pushRotateZoom(_canvas, _canvas_half_width, 27, 0, 1.2, 1.2, TFT_BLACK);
@@ -119,6 +120,14 @@ void GUI_Reachy::renderChat(const std::string& user,
 
     if (volume_percent >= 0)
         _draw_edge_progress(_canvas, volume_percent);
+
+    if (mic_auto_on)
+    {
+        _canvas->setFont(&fonts::Font0);
+        _canvas->setTextSize(1);
+        _canvas->setTextColor(TFT_GREEN);
+        _canvas->drawString("MIC ON", 166, 62);
+    }
 
     _draw_quit_button(0x8410);
     _canvas->pushSprite(0, 0);
