@@ -38,7 +38,7 @@ extern "C" void app_main(void)
        instantly and tapping the phone card works regardless of which
        app (if any) is open */
     WIFI_CONNECT::connect(RFID_WIFI_SSID, RFID_WIFI_PASSWORD, 8000);
-    NTP_SYNC::sync_rtc_time(&hal, 8000);
+    NTP_SYNC::sync_rtc_time(&hal, 30000);
     HA_CLIENT::init();
     RFID_SERVICE::init(&hal);
 
