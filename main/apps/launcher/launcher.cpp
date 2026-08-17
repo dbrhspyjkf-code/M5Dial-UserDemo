@@ -292,63 +292,28 @@ void Launcher::_screensaver_render()
         cv->drawLine(x0 + w - 3, y0 + 3, x0 + w / 2, y0 + h / 2 + 2, TFT_WHITE);
     }
 
-    /* Weather block: mixed-font rendering - Chinese runs in efontCN_16_b
-       while digits/units use FreeSansBold12pt7b, whose glyph height
-       matches (the efont half-width ASCII glyphs look noticeably
-       smaller next to the full-width CJK glyphs). */
+    /* Weather block (CJK-capable font - city/condition are Chinese) */
     if (weather.ok)
     {
-        struct Seg { const char* s; bool cjk; };
-        auto draw_mixed = [&](const Seg* segs, int n, int y)
-        {
-            auto* cv = _data.hal->canvas;
-            auto pick_font = [](bool cjk) -> const lgfx::IFont*
-            { return cjk ? (const lgfx::IFont*)GUI_FONT_CN_SMALL
-                         : (const lgfx::IFont*)&fonts::FreeSansBold12pt7b; };
-            int total_w = 0;
-            for (int i = 0; i < n; i++)
-            {
-                cv->setFont(pick_font(segs[i].cjk));
-                cv->setTextSize(1);
-                total_w += cv->textWidth(segs[i].s);
-            }
-            int x = 120 - total_w / 2;
-            for (int i = 0; i < n; i++)
-            {
-                cv->setFont(pick_font(segs[i].cjk));
-                cv->setTextSize(1);
-                /* FreeSans digits sit ~2px lower than the efont top line
-                   when top-anchored - nudge them up so the visual midlines
-                   match across the mixed line */
-                cv->drawString(segs[i].s, x, segs[i].cjk ? y : y - 2);
-                x += cv->textWidth(segs[i].s);
-            }
-        };
+        _data.hal->canvas->setFont(GUI_FONT_CN_SMALL);
+        _data.hal->canvas->setTextSize(1);
 
-        {
-            char cond_cn[24], temp[16];
-            snprintf(cond_cn, sizeof(cond_cn), "%s ", weather.condition.c_str());
-            snprintf(temp, sizeof(temp), "%s°C", weather.temp_c.c_str());
-            Seg line1[] = { { cond_cn, true }, { temp, false } };
-            draw_mixed(line1, 2, 116);
-        }
+        char line1[48];
+        snprintf(line1, sizeof(line1), "%s %s°C", weather.condition.c_str(), weather.temp_c.c_str());
+        _data.hal->canvas->drawCenterString(line1, 120, 116);
 
         if (!weather.city.empty() || !weather.humidity.empty())
         {
-            char head[32], hum[16];
-            snprintf(head, sizeof(head), "%s 湿度 ", weather.city.c_str());
-            snprintf(hum, sizeof(hum), "%s%%", weather.humidity.c_str());
-            Seg line2[] = { { head, true }, { hum, false } };
-            draw_mixed(line2, 2, 140);
+            char line2[48];
+            snprintf(line2, sizeof(line2), "%s 湿度 %s%%", weather.city.c_str(), weather.humidity.c_str());
+            _data.hal->canvas->drawCenterString(line2, 120, 140);
         }
 
         if (!weather.feels_like_c.empty())
         {
-            char head[16], feels[16];
-            snprintf(head, sizeof(head), "体感 ");
-            snprintf(feels, sizeof(feels), "%s°C", weather.feels_like_c.c_str());
-            Seg line3[] = { { head, true }, { feels, false } };
-            draw_mixed(line3, 2, 164);
+            char line3[48];
+            snprintf(line3, sizeof(line3), "体感 %s°C", weather.feels_like_c.c_str());
+            _data.hal->canvas->drawCenterString(line3, 120, 164);
         }
     }
     else
