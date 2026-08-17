@@ -25,6 +25,7 @@ using namespace MOONCAKE::USER_APP;
    only clears on reboot, and when it's out, an on-screen touch button
    would be exactly as unreachable as everything else. */
 static const uint32_t REBOOT_HOLD_MS = 3000;
+static const int DEFAULT_SELECTED_APP = 6;  // Reachy
 
 
 void Launcher::_menu_init()
@@ -63,6 +64,9 @@ void Launcher::_menu_init()
         y = b + r * std::sin(2 * 3.14 * i / n);
         _data.menu->getMenu()->addItem("", x, y, ICON_RADIUS, ICON_RADIUS);
     }
+
+    _data.menu->goToItem(DEFAULT_SELECTED_APP);
+    _data.menu->update(0, false);
 }
 
 
@@ -479,7 +483,7 @@ void Launcher::_app_open_callback(uint8_t selectedNum)
             app_ptr = new MOONCAKE::USER_APP::BLE_Server;
             break;
         case 6:
-            app_ptr = new MOONCAKE::USER_APP::VideoShit;
+            app_ptr = new MOONCAKE::USER_APP::AppReachy;
             break;
         case 7:
             app_ptr = new MOONCAKE::USER_APP::MoreMenu;
@@ -505,7 +509,7 @@ void Launcher::_app_open_callback(uint8_t selectedNum)
         }
 
         /* Run app */
-        _simple_app_manager(app_ptr);
+        _simple_app_manager(app_ptr, selectedNum == 6);
         
         /* Free app */
         delete app_ptr;
@@ -532,14 +536,14 @@ void Launcher::_app_open_callback(uint8_t selectedNum)
 }
 
 
-void Launcher::_simple_app_manager(MOONCAKE::APP_BASE* app)
+void Launcher::_simple_app_manager(MOONCAKE::APP_BASE* app, bool suppress_idle_screen)
 {
     app->setUserData((void*)_data.hal);
     app->onSetup();
     app->onCreate();
     while (1)
     {
-        if (!IDLE_SCREEN::tick(_data.hal))
+        if (suppress_idle_screen || !IDLE_SCREEN::tick(_data.hal))
         {
             app->onRunning();
         }

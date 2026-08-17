@@ -16,6 +16,7 @@
 #include "icon_fan.h"
 #include "icon_lcd.h"
 #include "icon_more.h"
+#include "icon_reachy.h"
 #include "icon_rfid.h"
 #include "icon_rtc.h"
 #include "icon_sonos.h"

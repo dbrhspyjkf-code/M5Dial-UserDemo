@@ -64,7 +64,7 @@ static std::array<std::string, ICON_NUM * 2> icon_tag_list = {
     "BRIGHTNESS", "",
     "DEEPSEEK", "",
     "EMAIL", "",
-    "AC", "",
+    "REACHY", "",
     "STOCK", "",
     "TIMER", "",
     "SONOS", ""
@@ -77,7 +77,7 @@ static std::array<const uint16_t*, ICON_NUM> icon_pic_list = {
     image_data_icon_brigntness,
     image_data_icon_deepseek,
     image_data_icon_email,
-    image_data_icon_temp,
+    image_data_icon_reachy,
     image_data_icon_stock,
     image_data_icon_timer,
     image_data_icon_sonos

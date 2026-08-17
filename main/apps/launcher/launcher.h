@@ -17,6 +17,7 @@
 
 #include "../app_lcd_test/app_lcd_test.h"
 #include "../app_temp_demo/app_temp_demo.h"
+#include "../app_reachy/app_reachy.h"
 #include "../app_rtc_test/app_rtc_test.h"
 #include "../app_rfid_test/app_rfid_test.h"
 #include "../app_set_brightness/app_set_brightness.h"
@@ -65,7 +66,7 @@ namespace MOONCAKE
                 void _launcher_init();
                 void _launcher_loop();
                 void _app_open_callback(uint8_t selectedNum);
-                void _simple_app_manager(MOONCAKE::APP_BASE* app);
+                void _simple_app_manager(MOONCAKE::APP_BASE* app, bool suppress_idle_screen = false);
 
                 void _screensaver_tick();
                 void _screensaver_render();
