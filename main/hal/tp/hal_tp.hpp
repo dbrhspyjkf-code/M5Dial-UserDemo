@@ -14,6 +14,8 @@
 #include <esp_timer.h>
 #include <esp_err.h>
 #include <esp_system.h>
+#include <esp_rom_sys.h>
+#include <esp_wifi.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -108,6 +110,10 @@ namespace FT3267
     {
         i2c_port_t i2c_port = I2C_NUM_0;
         uint8_t dev_addr = FT5x06_ADDR;
+        /* Needed by the bus-recovery path so it can bit-bang the pins
+           after tearing the driver down (M5Dial: SDA=11 SCL=12). */
+        int sda_pin = 11;
+        int scl_pin = 12;
     };
 
 
@@ -117,6 +123,158 @@ namespace FT3267
             Config_t _cfg;
             uint8_t _data_buffer[7];
             TouchPoint_t _touch_point_buffer;
+
+            /* Shared with _maintenance (was a function-local static before
+               the bus-recovery path needed to reset it). */
+            static inline int s_heal_lvl = 0;      /* 0=idle, 1=L1 done, 2=L2 done, 3=exhausted */
+            static inline uint32_t s_consec_fail = 0;
+            static inline uint32_t s_last_recover_ms = 0;
+            /* Set when a deep NACK spell was seen; the first FAIL->OK
+               transition afterwards is the rescue window - the controller
+               ACKs again, but its scan engine may already be wedged. */
+            static inline bool s_rescue_pending = false;
+
+
+            /* The FT3267 periodically stops ACKing for a few ms (~3.4s
+               period, firmware-internal activity) and occasionally sinks
+               into multi-second NACK spells. The scan engine can wedge
+               during those spells (G_MODE=0x00/FIRMID=0x00). Once ACK
+               returns we get a brief window where the controller is
+               writable again - use it to reset DEVICE_MODE immediately
+               instead of waiting for the 20s maintenance tick. */
+            inline void _rescue_on_ack_return()
+            {
+                if (!s_rescue_pending)
+                    return;
+                s_rescue_pending = false;
+
+                esp_err_t e_mode = _read_reg(FT5x06_ID_G_MODE, 1);
+                uint8_t g_mode = (e_mode == ESP_OK) ? _data_buffer[0] : 0xEE;
+                esp_err_t e_firm = _read_reg(FT5x06_ID_G_FIRMID, 1);
+                uint8_t g_firmid = (e_firm == ESP_OK) ? _data_buffer[0] : 0xEE;
+
+                if (e_mode == ESP_OK && e_firm == ESP_OK &&
+                    g_mode == 0x00 && g_firmid == 0x00)
+                {
+                    ESP_LOGW(TAG, "[TP-DIAG] hang signature right after NACK "
+                                  "spell - resetting scan engine in ACK window");
+                    _writr_reg(FT5x06_DEVICE_MODE, 0x00);
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    _tp_init();
+                    s_heal_lvl = 1;  /* engine reset done; next maintenance
+                                        tick can still escalate to reboot */
+                }
+                else if (e_mode == ESP_OK)
+                {
+                    ESP_LOGI(TAG, "[TP-DIAG] recovered from NACK spell, "
+                                  "G_MODE=0x%02x - no rescue needed", g_mode);
+                }
+            }
+
+
+            /* Standard I2C bus recovery: when a slave hangs mid-transaction
+               it can hold SDA low indefinitely, which makes every driver
+               transaction fail immediately (the ESP_FAIL bursts seen in
+               TP-DIAG logs). Clocking SCL 9 times lets the slave finish
+               whatever it was doing, then a STOP condition releases the
+               bus. Much cheaper than the previous last resort (rebooting
+               the whole device) and observed to precede the full
+               G_MODE=0x00 scan-engine hang, so clearing it early may
+               prevent the controller from wedging at all. */
+            inline void _i2c_bus_recover()
+            {
+                static bool s_recovering = false;
+                if (s_recovering)
+                    return;
+
+                uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                if (s_last_recover_ms != 0 && now_ms - s_last_recover_ms < 10000)
+                {
+                    /* Cooldown: keep counting but don't hammer the bus with
+                       reinstalls if the failure is persistent. */
+                    return;
+                }
+
+                s_recovering = true;
+                s_last_recover_ms = now_ms;
+                uint32_t fails = s_consec_fail;
+                s_consec_fail = 0;
+
+                ESP_LOGW(TAG, "[TP-DIAG] %lu consecutive i2c failures - "
+                              "running bus recovery (9 SCL pulses + STOP)", (unsigned long)fails);
+
+                int sda = _cfg.sda_pin;
+                int scl = _cfg.scl_pin;
+
+                /* Tear the driver down so we own the pins. Other tasks
+                   (RC522, RTC) calling the port meanwhile just get
+                   INVALID_STATE for one round and retry - acceptable. */
+                i2c_driver_delete(_cfg.i2c_port);
+
+                gpio_reset_pin((gpio_num_t)sda);
+                gpio_reset_pin((gpio_num_t)scl);
+                gpio_set_direction((gpio_num_t)sda, GPIO_MODE_INPUT_OUTPUT_OD);
+                gpio_set_direction((gpio_num_t)scl, GPIO_MODE_INPUT_OUTPUT_OD);
+                gpio_set_pull_mode((gpio_num_t)sda, GPIO_PULLUP_ONLY);
+                gpio_set_pull_mode((gpio_num_t)scl, GPIO_PULLUP_ONLY);
+                gpio_set_level((gpio_num_t)sda, 1);
+                gpio_set_level((gpio_num_t)scl, 1);
+                vTaskDelay(pdMS_TO_TICKS(2));
+
+                bool sda_released = (gpio_get_level((gpio_num_t)sda) == 1);
+                ESP_LOGW(TAG, "[TP-DIAG] bus recovery: SDA %s after driver teardown",
+                         sda_released ? "already released" : "held low - clocking out");
+
+                if (!sda_released)
+                {
+                    for (int i = 0; i < 9; i++)
+                    {
+                        gpio_set_level((gpio_num_t)scl, 0);
+                        esp_rom_delay_us(5);
+                        gpio_set_level((gpio_num_t)scl, 1);
+                        esp_rom_delay_us(5);
+                        if (gpio_get_level((gpio_num_t)sda) == 1)
+                        {
+                            sda_released = true;
+                            ESP_LOGW(TAG, "[TP-DIAG] SDA released after %d SCL pulses", i + 1);
+                            break;
+                        }
+                    }
+
+                    /* STOP: SDA low -> high while SCL stays high */
+                    gpio_set_level((gpio_num_t)sda, 0);
+                    esp_rom_delay_us(5);
+                    gpio_set_level((gpio_num_t)scl, 1);
+                    esp_rom_delay_us(5);
+                    gpio_set_level((gpio_num_t)sda, 1);
+                    esp_rom_delay_us(5);
+
+                    if (!sda_released)
+                        ESP_LOGE(TAG, "[TP-DIAG] SDA still held low after 9 pulses - "
+                                      "slave may need a power cycle");
+                }
+
+                /* Reinstall the driver with the same configuration as hal.cpp */
+                i2c_config_t conf;
+                memset(&conf, 0, sizeof(i2c_config_t));
+                conf.mode = I2C_MODE_MASTER;
+                conf.sda_io_num = (gpio_num_t)sda;
+                conf.scl_io_num = (gpio_num_t)scl;
+                conf.master.clk_speed = 100000;
+                conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+                conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+                conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
+                i2c_param_config(_cfg.i2c_port, &conf);
+                i2c_driver_install(_cfg.i2c_port, I2C_MODE_MASTER, 0, 0, 0);
+
+                /* Fresh bus, fresh controller - give the heal ladder a
+                   clean slate so L1/L2 get another chance before any reboot. */
+                s_heal_lvl = 0;
+                _tp_init();
+                _dump_status("post-bus-recovery");
+
+                s_recovering = false;
+            }
 
 
             inline esp_err_t _writr_reg(uint8_t reg, uint8_t data)
@@ -130,7 +288,19 @@ namespace FT3267
             inline esp_err_t _read_reg(uint8_t reg, uint8_t readSize)
             {
                 /* Store data into buffer */
-                return i2c_master_write_read_device(_cfg.i2c_port, _cfg.dev_addr, &reg, 1, _data_buffer, readSize, pdMS_TO_TICKS(200));
+                esp_err_t err = i2c_master_write_read_device(_cfg.i2c_port, _cfg.dev_addr, &reg, 1, _data_buffer, readSize, pdMS_TO_TICKS(200));
+                if (err == ESP_OK)
+                {
+                    if (s_rescue_pending)
+                        _rescue_on_ack_return();
+                    s_consec_fail = 0;
+                }
+                else if (++s_consec_fail >= 5)
+                {
+                    s_rescue_pending = true;
+                    _i2c_bus_recover();
+                }
+                return err;
             }
 
 
@@ -148,8 +318,16 @@ namespace FT3267
 
                 if (err != s_last_err)
                 {
-                    ESP_LOGW(TAG, "[TP-DIAG] err changed: %s (0x%x), touch_num=%u",
-                             esp_err_to_name(err), err, touch_num);
+                    /* WiFi snapshot on bus failure transitions: if the
+                       ESP_FAIL bursts line up with weak RSSI / RF activity,
+                       the root cause is the 3V3 rail sagging under WiFi TX,
+                       not the touch controller itself. */
+                    int rssi = 0;
+                    wifi_ap_record_t ap;
+                    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK)
+                        rssi = ap.rssi;
+                    ESP_LOGW(TAG, "[TP-DIAG] err changed: %s (0x%x), touch_num=%u, rssi=%d",
+                             esp_err_to_name(err), err, touch_num, rssi);
                     s_last_err = err;
                     s_last_num = touch_num;
                     return;
@@ -258,7 +436,6 @@ namespace FT3267
             {
                 static const uint32_t REINIT_INTERVAL_MS = 20000;
                 static uint32_t s_last_reinit_ms = 0;
-                static int s_heal_lvl = 0;   /* 0=idle, 1=L1 done, 2=L2 done, 3=exhausted */
 
                 uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
                 if (s_last_reinit_ms == 0) { s_last_reinit_ms = now_ms; return; }
