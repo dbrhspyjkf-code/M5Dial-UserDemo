@@ -11,17 +11,13 @@
 #include "launcher.h"
 #include "../common_define.h"
 #include "../utilities/idle_screen/idle_screen.h"
+#include "../utilities/codex_client/codex_client_config.h"
+#include "../utilities/ntp_sync/ntp_sync.h"
 #include <ctime>
 #include "esp_system.h"
 
 
 using namespace MOONCAKE::USER_APP;
-
-/* Backlight off after the screensaver has been showing this long with no
-   activity; restored to this brightness on wake (same value IDLE_SCREEN
-   uses for its own screen-off/on cycle inside apps). */
-static const uint32_t SCREENSAVER_SCREEN_OFF_MS = 3 * 60 * 1000;
-static const int SCREENSAVER_ON_BRIGHTNESS = 128;
 
 /* Holding the physical encoder button on the home carousel this long
    reboots the device. Reads the button GPIO directly, not touch - the
@@ -231,10 +227,48 @@ void Launcher::_screensaver_render()
     _data.hal->canvas->setTextColor(TFT_WHITE);
     _data.hal->canvas->setTextSize(4);
     int time_h = _data.hal->canvas->fontHeight();
-    _data.hal->canvas->drawCenterString(time_buf, 120, 72 - time_h / 2);
+    _data.hal->canvas->drawCenterString(time_buf, 120, 55 - time_h / 2);
 
+    /* Date */
     _data.hal->canvas->setTextSize(2);
-    _data.hal->canvas->drawCenterString(date_buf, 120, 120);
+    _data.hal->canvas->drawCenterString(date_buf, 120, 80);
+
+    /* Codex usage */
+    _data.hal->canvas->drawCenterString("Codex usage", 120, 110);
+
+    if (_data.codex_usage.ok)
+    {
+        /* Ring progress at screen edge */
+        float used = _data.codex_usage.used;
+        float progress_angle = -90.0f + used * 3.6f;  /* -90=top, 360° clockwise */
+
+        uint16_t fill_color = TFT_GREEN;
+        if (used > 80.0f)      fill_color = TFT_RED;
+        else if (used > 50.0f) fill_color = TFT_ORANGE;
+
+        /* Anti-alias: 5-layer smooth gradient (outer→inner) */
+        uint16_t c1 = (uint16_t)(fill_color >> 3) & 0x18E3;  /* 12.5% */
+        uint16_t c2 = (uint16_t)(fill_color >> 2) & 0x39E7;  /* 25% */
+        uint16_t c3 = (uint16_t)(fill_color >> 1) & 0x7BEF;  /* 50% */
+        _data.hal->canvas->fillArc(120, 120, 118, 119, -90, progress_angle, c1);
+        _data.hal->canvas->fillArc(120, 120, 117, 118, -90, progress_angle, c2);
+        _data.hal->canvas->fillArc(120, 120, 116, 117, -90, progress_angle, c3);
+        _data.hal->canvas->fillArc(120, 120, 115, 116, -90, progress_angle, (uint16_t)(c3 | c2));
+        _data.hal->canvas->fillArc(120, 120, 114, 115, -90, progress_angle, fill_color);
+
+        char usage_buf[16];
+        snprintf(usage_buf, sizeof(usage_buf), "%.0f%% used", used);
+        _data.hal->canvas->drawCenterString(usage_buf, 120, 140);
+
+        char reset_buf[32];
+        snprintf(reset_buf, sizeof(reset_buf), "%s", _data.codex_usage.reset.c_str());
+        _data.hal->canvas->drawCenterString(reset_buf, 120, 170);
+        _data.hal->canvas->drawCenterString("Reset", 120, 200);
+    }
+    else
+    {
+        _data.hal->canvas->drawCenterString("--", 120, 160);
+    }
 
     _data.hal->canvas->pushSprite(0, 0);
 }
@@ -281,16 +315,6 @@ void Launcher::_screensaver_tick()
     {
         if (activity)
         {
-            /* If the backlight was off, turning it back on IS the wake
-               gesture - don't also let it act as an icon tap/rotation on
-               the home carousel underneath, same "wake, don't act"
-               convention as IDLE_SCREEN. */
-            if (_data.screen_off)
-            {
-                _data.hal->display.setBrightness(SCREENSAVER_ON_BRIGHTNESS);
-                _data.screen_off = false;
-            }
-
             if (touched)
             {
                 while (_data.hal->tp.isTouched())
@@ -307,22 +331,6 @@ void Launcher::_screensaver_tick()
 
             _data.screensaver_on = false;
             _data.screensaver_last_activity_ms = millis();
-            return;
-        }
-
-        /* Backlight off after SCREENSAVER_SCREEN_OFF_MS of no activity
-           since the screensaver came up - nothing to render once it's
-           off, so skip the once-a-second refresh below too. */
-        if (!_data.screen_off &&
-            millis() - _data.screensaver_started_ms > SCREENSAVER_SCREEN_OFF_MS)
-        {
-            _data.hal->display.setBrightness(0);
-            _data.screen_off = true;
-            return;
-        }
-
-        if (_data.screen_off)
-        {
             return;
         }
 
@@ -345,7 +353,9 @@ void Launcher::_screensaver_tick()
     {
         _data.screensaver_on = true;
         _data.screensaver_started_ms = millis();
-        _data.screen_off = false;
+        /* Force immediate Codex fetch on screensaver entry */
+        _data.codex_usage = CODEX_CLIENT::fetch(CODEX_SERVER_URL);
+        _data.codex_last_poll_ms = millis();
         _screensaver_render();
         _data.screensaver_last_render_ms = millis();
     }
@@ -582,10 +592,30 @@ void Launcher::onCreate()
 
 void Launcher::onRunning()
 {
+    /* Retry NTP if RTC holds garbage (e.g. after flash with dead battery) */
+    static uint32_t ntp_retry_ms = 0;
+    if (millis() - ntp_retry_ms > 30000)
+    {
+        struct tm now;
+        _data.hal->rtc.getTime(now);
+        if (now.tm_hour > 23 || now.tm_min > 59 || now.tm_mday > 31 || now.tm_mon > 11)
+        {
+            ESP_LOGW("Launcher", "RTC garbage detected, retrying NTP...");
+            NTP_SYNC::sync_rtc_time(_data.hal, 15000);
+        }
+        ntp_retry_ms = millis();
+    }
+
+    /* Poll Codex usage every 60s */
+    if (millis() - _data.codex_last_poll_ms > 60000)
+    {
+        _data.codex_usage = CODEX_CLIENT::fetch(CODEX_SERVER_URL);
+        _data.codex_last_poll_ms = millis();
+    }
+
     _screensaver_tick();
     if (!_data.screensaver_on)
     {
         _launcher_loop();
     }
 }
-

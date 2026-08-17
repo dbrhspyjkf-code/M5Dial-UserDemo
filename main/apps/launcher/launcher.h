@@ -25,7 +25,7 @@
 #include "../app_ble_server/app_ble_server.h"
 #include "../app_timer/app_timer.h"
 #include "../app_sonos/app_sonos.h"
-
+#include "../utilities/codex_client/codex_client.h"
 
 
 namespace MOONCAKE
@@ -46,8 +46,11 @@ namespace MOONCAKE
                 uint32_t screensaver_last_render_ms = 0;
                 int64_t screensaver_last_encoder_count = 0;
 
-                bool screen_off = false;
                 uint32_t screensaver_started_ms = 0;
+
+                /* Codex usage, polled every 60s */
+                CODEX_CLIENT::Usage codex_usage;
+                uint32_t codex_last_poll_ms = 0;
             };
         }
 
@@ -90,4 +93,3 @@ namespace MOONCAKE
 
     }
 }
-
