@@ -3,18 +3,29 @@
  */
 #include "idle_screen.h"
 #include "../../common_define.h"
+#include <ctime>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 namespace IDLE_SCREEN
 {
-    static const uint32_t IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+    static const uint32_t NIGHT_IDLE_MS = 60 * 1000;       /* 60s at night */
     static const int ON_BRIGHTNESS = 128;
+    static const int NIGHT_START_H = 0;
+    static const int NIGHT_END_H = 7;
 
     static bool s_initialized = false;
     static uint32_t s_last_activity_ms = 0;
     static int64_t s_last_encoder_count = 0;
     static bool s_screen_on = true;
+
+    static bool _is_night(HAL::HAL* hal)
+    {
+        struct tm time_now;
+        if (!hal->rtc.getTime(time_now))
+            return false;
+        return (time_now.tm_hour >= NIGHT_START_H && time_now.tm_hour < NIGHT_END_H);
+    }
 
     bool tick(HAL::HAL* hal)
     {
@@ -28,22 +39,10 @@ namespace IDLE_SCREEN
         bool touched = hal->tp.isTouched();
         if (touched)
         {
-            /* TP_FT3267::isTouched() is a bare I2C register read with no
-               error checking - an occasional bus glitch can report a
-               phantom touch for a single poll, and tick() is polled at
-               very high frequency while idle. A real finger touch holds
-               for far longer than one poll, so require it to still read
-               true after a short delay before trusting it (same fix
-               applied to the launcher's screensaver after a phantom
-               touch was observed live waking it after only ~31s idle). */
             delay(20);
             touched = hal->tp.isTouched();
         }
 
-        /* Read the raw count directly (no side effects) instead of
-           wasMoved(), which mutates its own internal _last_count and
-           would otherwise silently consume rotation before the open
-           app's own onRunning() gets a chance to see it. */
         int64_t current_count = hal->encoder.getCount();
         bool encoder_moved = (current_count != s_last_encoder_count);
         s_last_encoder_count = current_count;
@@ -61,8 +60,7 @@ namespace IDLE_SCREEN
                 hal->display.setBrightness(ON_BRIGHTNESS);
                 s_screen_on = true;
 
-                /* Absorb the whole gesture that woke the screen, same
-                   "wake, don't act" behavior as a phone lock screen. */
+                /* Absorb the wake gesture */
                 if (touched)
                 {
                     while (hal->tp.isTouched())
@@ -78,9 +76,6 @@ namespace IDLE_SCREEN
                 }
                 if (encoder_moved)
                 {
-                    /* Absorb the pending rotation into wasMoved()'s own
-                       tracking so the open app's next wasMoved() call
-                       doesn't see leftover movement from before wake. */
                     hal->encoder.wasMoved(true);
                 }
 
@@ -91,7 +86,8 @@ namespace IDLE_SCREEN
             return false;
         }
 
-        if (s_screen_on && (millis() - s_last_activity_ms > IDLE_TIMEOUT_MS))
+        /* Only sleep during night hours (00:00-06:59) */
+        if (s_screen_on && _is_night(hal) && (millis() - s_last_activity_ms > NIGHT_IDLE_MS))
         {
             hal->display.setBrightness(0);
             s_screen_on = false;
