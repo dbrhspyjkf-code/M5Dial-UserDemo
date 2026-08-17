@@ -98,6 +98,14 @@ static uint8_t* rc522_read_n(rc522_handle_t rc522, uint8_t addr, uint8_t n)
 static inline uint8_t rc522_read(rc522_handle_t rc522, uint8_t addr)
 {
     uint8_t* buffer = rc522_read_n(rc522, addr, 1);
+    if (buffer == NULL) {
+        /* rc522_read_n failed (I2C timeout etc.) - previously this
+           dereferenced the NULL buffer (LoadProhibited crash) whenever
+         the shared I2C bus stalled, e.g. during the FT3267 NACK spells.
+           Return 0: callers only OR/AND masks into the value and the
+           subsequent rc522_write() will surface the real error. */
+        return 0;
+    }
     uint8_t res = buffer[0];
     free(buffer);
 
