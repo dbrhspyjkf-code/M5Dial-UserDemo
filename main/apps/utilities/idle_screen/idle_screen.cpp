@@ -19,11 +19,22 @@ namespace IDLE_SCREEN
     static int64_t s_last_encoder_count = 0;
     static bool s_screen_on = true;
 
+    /* Wall-clock read for display: prefer the SYSTEM clock - after
+       any successful NTP sync it is maintained by ESP32 internally and
+       never freezes. The BM8563 RTC was observed stopping (screen
+       frozen at a fixed time while everything else kept running);
+       RTC is only the boot-time seed when NTP has not synced yet. */
+    static void _local_time(struct tm& out)
+    {
+        time_t now;
+        time(&now);
+        localtime_r(&now, &out);
+    }
+
     static bool _is_night(HAL::HAL* hal)
     {
         struct tm time_now;
-        if (!hal->rtc.getTime(time_now))
-            return false;
+        _local_time(time_now);
         return (time_now.tm_hour >= NIGHT_START_H && time_now.tm_hour < NIGHT_END_H);
     }
 

@@ -72,6 +72,31 @@ namespace NTP_SYNC
             ESP_LOGW(TAG, "Server %s timed out", NTP_SERVERS[i]);
         }
 
+        /* NTP failed: seed the SYSTEM clock from the RTC so local time
+           is at least plausible (UI reads system time, and the BM8563
+           has been observed stopping - so also re-write the registers
+           to clear a possible CH halt flag while we are here). */
+        struct tm rtc_time;
+        if (hal->rtc.getTime(rtc_time) == ESP_OK &&
+            rtc_time.tm_hour <= 23 && rtc_time.tm_min <= 59 &&
+            rtc_time.tm_mon <= 11 && rtc_time.tm_mday >= 1 && rtc_time.tm_mday <= 31 &&
+            rtc_time.tm_year >= 2024)
+        {
+            struct tm seed = rtc_time;
+            seed.tm_year = rtc_time.tm_year - 1900;   /* mktime is 1900-based, hal is 2000-based */
+            time_t t = mktime(&seed);
+            if (t > (time_t)1700000000)              /* sanity: after ~Nov 2023 */
+            {
+                struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+                settimeofday(&tv, nullptr);
+                ESP_LOGW(TAG, "NTP failed, system clock seeded from RTC");
+            }
+            /* Rewrite the time registers - clears the CH bit if the
+               oscillator had been halted (values are read-then-written
+               back, so no visible jump) */
+            hal->rtc.setTime(rtc_time);
+        }
+
         ESP_LOGW(TAG, "All %d NTP servers timed out, RTC left unchanged", NTP_SERVER_COUNT);
     }
 }

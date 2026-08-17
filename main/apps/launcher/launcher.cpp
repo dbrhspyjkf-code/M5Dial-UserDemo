@@ -209,8 +209,15 @@ void Launcher::_launcher_loop()
 
 void Launcher::_screensaver_render()
 {
+    /* Wall clock from the SYSTEM time (NTP-synced, maintained by
+       ESP32 internally) - the BM8563 RTC was observed stopping, which
+       froze the on-screen clock while the UI kept running. */
     struct tm time_now;
-    _data.hal->rtc.getTime(time_now);
+    {
+        time_t now;
+        time(&now);
+        localtime_r(&now, &time_now);
+    }
 
     /* Snapshot the worker-owned data under the lock, then render from
        the copy - no std::string access races with _data_worker_task. */
