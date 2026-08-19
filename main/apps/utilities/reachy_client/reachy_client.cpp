@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <cstring>
 #include "esp_http_client.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "cJSON.h"
 
@@ -26,15 +25,6 @@ namespace REACHY_CLIENT
         size_t max_len = 4096;
     };
 
-    static const size_t MAX_JPEG_BYTES = 30 * 1024;
-
-    struct BinaryResponse
-    {
-        std::vector<uint8_t>* bytes = nullptr;
-        size_t len = 0;
-        bool overflow = false;
-    };
-
     static esp_err_t _text_event_handler(esp_http_client_event_t* evt)
     {
         if (evt->event_id == HTTP_EVENT_ON_DATA)
@@ -45,23 +35,6 @@ namespace REACHY_CLIENT
             size_t copy_len = evt->data_len < (int)room ? evt->data_len : room;
             resp->body.append((const char*)evt->data, copy_len);
         }
-        return ESP_OK;
-    }
-
-    static esp_err_t _binary_event_handler(esp_http_client_event_t* evt)
-    {
-        if (evt->event_id != HTTP_EVENT_ON_DATA)
-            return ESP_OK;
-
-        auto* resp = (BinaryResponse*)evt->user_data;
-        if (resp->len + evt->data_len > resp->bytes->size())
-        {
-            resp->overflow = true;
-            return ESP_OK;
-        }
-
-        memcpy(resp->bytes->data() + resp->len, evt->data, evt->data_len);
-        resp->len += evt->data_len;
         return ESP_OK;
     }
 
@@ -350,92 +323,6 @@ namespace REACHY_CLIENT
         return audio;
     }
 
-    VideoState fetch_video_state(const char* base_url)
-    {
-        VideoState video;
-        std::string body;
-        auto result = _request_json(base_url, "/api/conversation/video", HTTP_METHOD_GET, nullptr, &body);
-        if (!result.ok) return video;
-
-        cJSON* root = cJSON_Parse(body.c_str());
-        if (root)
-        {
-            video.enabled = _json_bool(root, "video_enabled", video.enabled);
-            video.active_s = _json_float(root, "frame_period_active_s", video.active_s);
-            video.idle_s = _json_float(root, "frame_period_idle_s", video.idle_s);
-            cJSON_Delete(root);
-        }
-        video.ok = true;
-        return video;
-    }
-
-    JpegFrame fetch_camera_jpeg(const char* base_url)
-    {
-        JpegFrame frame;
-        prepare_camera_jpeg_buffer(frame);
-        fetch_camera_jpeg(base_url, frame);
-        return frame;
-    }
-
-    bool prepare_camera_jpeg_buffer(JpegFrame& frame)
-    {
-        if (frame.bytes.capacity() >= MAX_JPEG_BYTES)
-            return true;
-
-        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-        if (largest < MAX_JPEG_BYTES + 1024)
-        {
-            ESP_LOGW(TAG, "camera buffer unavailable: largest=%d need=%d",
-                     (int)largest, (int)MAX_JPEG_BYTES);
-            return false;
-        }
-
-        frame.bytes.reserve(MAX_JPEG_BYTES);
-        return frame.bytes.capacity() >= MAX_JPEG_BYTES;
-    }
-
-    bool fetch_camera_jpeg(const char* base_url, JpegFrame& frame)
-    {
-        frame.ok = false;
-        frame.status = 0;
-        frame.bytes.clear();
-
-        if (frame.bytes.capacity() < MAX_JPEG_BYTES)
-        {
-            ESP_LOGW(TAG, "camera buffer not prepared: capacity=%d", (int)frame.bytes.capacity());
-            return false;
-        }
-
-        char url[192];
-        snprintf(url, sizeof(url), "%s/api/camera/frame", base_url);
-
-        BinaryResponse response;
-        frame.bytes.resize(frame.bytes.capacity());
-        response.bytes = &frame.bytes;
-
-        esp_http_client_config_t config = {};
-        config.url = url;
-        config.method = HTTP_METHOD_GET;
-        config.timeout_ms = 3000;
-        config.event_handler = _binary_event_handler;
-        config.user_data = &response;
-
-        esp_http_client_handle_t client = esp_http_client_init(&config);
-        esp_http_client_set_header(client, "Accept", "image/jpeg");
-        esp_err_t err = esp_http_client_perform(client);
-        frame.status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-
-        frame.ok = err == ESP_OK && frame.status == 200 && !response.overflow &&
-                   response.len > 4 &&
-                   frame.bytes[0] == 0xff && frame.bytes[1] == 0xd8;
-        frame.bytes.resize(frame.ok ? response.len : 0);
-        if (!frame.ok)
-            ESP_LOGW(TAG, "fetch_camera_jpeg failed: err=%d status=%d bytes=%d overflow=%d",
-                     err, frame.status, (int)response.len, response.overflow ? 1 : 0);
-        return frame.ok;
-    }
-
     ModeState fetch_mode_state(const char* base_url)
     {
         ModeState mode;
@@ -498,12 +385,6 @@ namespace REACHY_CLIENT
         char body[40];
         snprintf(body, sizeof(body), "{\"rms_min\":%.3f}", rms_min);
         return _request_json(base_url, "/api/audio/vad", HTTP_METHOD_PUT, body);
-    }
-
-    OperationResult set_video_enabled(const char* base_url, bool enabled)
-    {
-        return _request_json(base_url, "/api/conversation/video", HTTP_METHOD_PUT,
-                             enabled ? "{\"enabled\":true}" : "{\"enabled\":false}");
     }
 
     OperationResult set_backend(const char* base_url, const char* backend)

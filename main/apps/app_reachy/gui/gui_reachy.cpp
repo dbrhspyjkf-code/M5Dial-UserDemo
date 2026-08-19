@@ -179,42 +179,6 @@ void GUI_Reachy::renderSystem(const std::string& status)
     _canvas->pushSprite(0, 0);
 }
 
-void GUI_Reachy::renderVideo(const REACHY_CLIENT::VideoState& video,
-                             const REACHY_CLIENT::JpegFrame& frame,
-                             const std::string& status)
-{
-    _canvas->fillScreen(TFT_BLACK);
-    _icon->pushRotateZoom(_canvas, _canvas_half_width, 27, 0, 1.2, 1.2, TFT_BLACK);
-
-    static const int preview_x = 24;
-    static const int preview_y = 54;
-    static const int preview_w = 192;
-    static const int preview_h = 112;
-    _canvas->fillSmoothRoundRect(preview_x, preview_y, preview_w, preview_h, 8, 0x18c3);
-    if (frame.ok && !frame.bytes.empty())
-    {
-        _canvas->drawJpg(frame.bytes.data(), frame.bytes.size(), preview_x + 6, preview_y + 6,
-                         preview_w - 12, preview_h - 12, 0, 0, -1.0f, -1.0f);
-    }
-
-    if (!frame.ok)
-    {
-        _canvas->setFont(GUI_FONT_CN_SMALL);
-        _canvas->setTextSize(1);
-        _canvas->setTextColor(0x8410);
-        _canvas->drawCenterString("preview waiting", 120, 112);
-    }
-
-    char timing[40];
-    snprintf(timing, sizeof(timing), "active %.1fs idle %.1fs", video.active_s, video.idle_s);
-    _canvas->setTextColor(0x8410);
-    _canvas->drawCenterString(timing, 120, 194);
-    _canvas->drawCenterString(status.c_str(), 120, 214);
-
-    _draw_quit_button(0x8410);
-    _canvas->pushSprite(0, 0);
-}
-
 void GUI_Reachy::renderMode(const REACHY_CLIENT::ModeState& mode,
                             int edit_mode,
                             bool restart_confirm,

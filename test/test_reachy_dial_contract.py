@@ -46,15 +46,13 @@ class ReachyDialContractTests(unittest.TestCase):
         self.assertIn("canvas->setFont(GUI_FONT_CN_SMALL);", gui)
 
         audio = gui.split("void GUI_Reachy::renderAudio", 1)[1].split("void GUI_Reachy::renderSystem", 1)[0]
-        system = gui.split("void GUI_Reachy::renderSystem", 1)[1].split("void GUI_Reachy::renderVideo", 1)[0]
-        video = gui.split("void GUI_Reachy::renderVideo", 1)[1]
+        system = gui.split("void GUI_Reachy::renderSystem", 1)[1].split("void GUI_Reachy::renderMode", 1)[0]
         self.assertNotIn("setFont(&fonts::Font0);", audio)
         self.assertNotIn("setFont(&fonts::Font0);", system)
         self.assertIn("_draw_row(_canvas, 58", audio)
         self.assertIn("_draw_row(_canvas, 148", audio)
         self.assertIn("_draw_row(_canvas, 58", system)
         self.assertIn("_draw_row(_canvas, 148", system)
-        self.assertIn("_canvas->setFont(GUI_FONT_CN_SMALL);", video)
 
     def test_reachy_icon_generated_from_user_image(self):
         icon = (ROOT / "main/apps/launcher/launcher_icons/icon_reachy.h").read_text()
@@ -80,30 +78,28 @@ class ReachyDialContractTests(unittest.TestCase):
         self.assertIn("360 * percent", progress)
         self.assertIn("if (percent >= 100)", progress)
 
-    def test_reachy_has_multi_page_audio_system_video_controls(self):
+    def test_reachy_has_multi_page_audio_system_mode_controls(self):
         header = (ROOT / "main/apps/app_reachy/app_reachy.h").read_text()
         app = (ROOT / "main/apps/app_reachy/app_reachy.cpp").read_text()
         gui = (ROOT / "main/apps/app_reachy/gui/gui_reachy.h").read_text()
         client = (ROOT / "main/apps/utilities/reachy_client/reachy_client.cpp").read_text()
 
-        for page in ("CHAT", "AUDIO", "SYSTEM", "VIDEO", "MODE"):
+        for page in ("CHAT", "AUDIO", "MODE", "SYSTEM"):
             self.assertIn(page, header)
         enum_body = header.split("enum Page", 1)[1].split("};", 1)[0]
-        self.assertLess(enum_body.index("CHAT"), enum_body.index("VIDEO"))
-        self.assertLess(enum_body.index("VIDEO"), enum_body.index("AUDIO"))
+        self.assertNotIn("VIDEO", enum_body)
+        self.assertLess(enum_body.index("CHAT"), enum_body.index("AUDIO"))
         self.assertLess(enum_body.index("AUDIO"), enum_body.index("MODE"))
         self.assertLess(enum_body.index("MODE"), enum_body.index("SYSTEM"))
         self.assertIn("_handle_touch", app)
         self.assertIn("_handle_encoder", app)
         self.assertIn("renderAudio", gui)
         self.assertIn("renderSystem", gui)
-        self.assertIn("renderVideo", gui)
         for endpoint in (
             "/api/volume",
             "/api/audio/input",
             "/api/audio/vad",
             "/api/system/restart",
-            "/api/conversation/video",
         ):
             self.assertIn(endpoint, client)
         self.assertIn("HTTP_METHOD_PUT", client)
@@ -142,41 +138,6 @@ class ReachyDialContractTests(unittest.TestCase):
         self.assertIn("restart_yrobot", app)
         self.assertIn("_cycle_voice", app)
 
-    def test_reachy_video_fetches_and_draws_bounded_jpeg_frames(self):
-        client_h = (ROOT / "main/apps/utilities/reachy_client/reachy_client.h").read_text()
-        client = (ROOT / "main/apps/utilities/reachy_client/reachy_client.cpp").read_text()
-        app = (ROOT / "main/apps/app_reachy/app_reachy.cpp").read_text()
-        gui_h = (ROOT / "main/apps/app_reachy/gui/gui_reachy.h").read_text()
-        gui = (ROOT / "main/apps/app_reachy/gui/gui_reachy.cpp").read_text()
-
-        self.assertIn("struct JpegFrame", client_h)
-        self.assertIn("std::vector<uint8_t> bytes", client_h)
-        self.assertIn("fetch_camera_jpeg", client_h)
-        self.assertIn("prepare_camera_jpeg_buffer", client_h)
-        self.assertIn("/api/camera/frame", client)
-        self.assertIn("static const size_t MAX_JPEG_BYTES = 30 * 1024;", client)
-        self.assertIn("heap_caps_get_largest_free_block", client)
-        self.assertIn("HTTP_EVENT_ON_DATA", client)
-        self.assertIn("size_t len = 0;", client)
-        self.assertIn("memcpy(resp->bytes->data() + resp->len", client)
-        self.assertNotIn(".insert(resp->bytes.end()", client)
-
-        self.assertIn("static const uint32_t FRAME_POLL_MS", app)
-        self.assertIn("_prepare_frame", app)
-        self.assertIn("_fetch_frame", app)
-        self.assertIn("fetch_camera_jpeg", app)
-        self.assertIn("last_frame_fetch_ms", app)
-        self.assertIn("const REACHY_CLIENT::JpegFrame& frame", gui_h)
-        self.assertIn("drawJpg(frame.bytes.data(), frame.bytes.size(), preview_x + 6, preview_y + 6", gui)
-        self.assertIn("-1.0f, -1.0f", gui)
-
-    def test_reachy_video_preview_fetches_even_when_video_upload_is_off(self):
-        app = (ROOT / "main/apps/app_reachy/app_reachy.cpp").read_text()
-        fetch_frame = app.split("void AppReachy::_fetch_frame()", 1)[1].split("void AppReachy::_fetch_mode()", 1)[0]
-        self.assertNotIn("if (!_data.video.enabled)", fetch_frame)
-        running_video = app.split("else if (_data.page == REACHY::VIDEO &&", 1)[1]
-        self.assertNotIn("_data.video.enabled &&", running_video)
-
     def test_launcher_defaults_to_reachy_after_first_menu_update(self):
         launcher = (ROOT / "main/apps/launcher/launcher.cpp").read_text()
         simple_menu = (ROOT / "main/apps/utilities/smooth_menu/src/simple_menu/simple_menu.cpp").read_text()
@@ -185,13 +146,25 @@ class ReachyDialContractTests(unittest.TestCase):
         self.assertIn("_data.menu->goToItem(DEFAULT_SELECTED_APP)", launcher)
         self.assertNotIn("_selector->goToItem(0);", simple_menu)
 
-    def test_reachy_video_uses_lgfx_fit_scaling(self):
+    def test_reachy_video_page_is_removed(self):
+        header = (ROOT / "main/apps/app_reachy/app_reachy.h").read_text()
+        app = (ROOT / "main/apps/app_reachy/app_reachy.cpp").read_text()
         gui = (ROOT / "main/apps/app_reachy/gui/gui_reachy.cpp").read_text()
-        video = gui.split("void GUI_Reachy::renderVideo", 1)[1]
+        gui_h = (ROOT / "main/apps/app_reachy/gui/gui_reachy.h").read_text()
+        client_h = (ROOT / "main/apps/utilities/reachy_client/reachy_client.h").read_text()
+        client = (ROOT / "main/apps/utilities/reachy_client/reachy_client.cpp").read_text()
 
-        self.assertNotIn("_jpeg_size", video)
-        self.assertIn("drawJpg(frame.bytes.data(), frame.bytes.size(), preview_x + 6, preview_y + 6", video)
-        self.assertIn("-1.0f, -1.0f", video)
+        for removed in ("VIDEO", "_fetch_video", "_fetch_frame", "_prepare_frame",
+                        "_toggle_video", "last_video_fetch_ms", "last_frame_fetch_ms",
+                        "renderVideo", "VideoState", "JpegFrame", "fetch_camera_jpeg",
+                        "prepare_camera_jpeg_buffer", "set_video_enabled",
+                        "/api/conversation/video", "/api/camera/frame"):
+            self.assertNotIn(removed, header)
+            self.assertNotIn(removed, app)
+            self.assertNotIn(removed, gui)
+            self.assertNotIn(removed, gui_h)
+            self.assertNotIn(removed, client_h)
+            self.assertNotIn(removed, client)
 
 
 if __name__ == "__main__":

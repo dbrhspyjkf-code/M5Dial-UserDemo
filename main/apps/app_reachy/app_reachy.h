@@ -16,7 +16,6 @@ namespace MOONCAKE
             enum Page
             {
                 CHAT = 0,
-                VIDEO,
                 AUDIO,
                 MODE,
                 SYSTEM,
@@ -45,14 +44,10 @@ namespace MOONCAKE
                 ModeEdit mode_edit = MODE_EDIT_NONE;
                 REACHY_CLIENT::ChatTurn turn;
                 REACHY_CLIENT::AudioState audio;
-                REACHY_CLIENT::VideoState video;
-                REACHY_CLIENT::JpegFrame camera_frame;
                 REACHY_CLIENT::ModeState mode;
                 std::string status = "Loading...";
                 uint32_t last_fetch_ms = 0;
                 uint32_t last_audio_fetch_ms = 0;
-                uint32_t last_video_fetch_ms = 0;
-                uint32_t last_frame_fetch_ms = 0;
                 uint32_t last_audio_change_ms = 0;
                 uint32_t mic_auto_on_ms = 0;
                 /* 0 = no flash; true when the flash should read MIC OFF */
@@ -73,9 +68,6 @@ namespace MOONCAKE
 
                 void _fetch();
                 void _fetch_audio();
-                void _fetch_video();
-                void _prepare_frame();
-                void _fetch_frame();
                 void _fetch_mode();
                 void _render();
                 void _handle_encoder();
@@ -86,7 +78,6 @@ namespace MOONCAKE
                 void _commit_audio_changes();
                 void _restart_yrobot();
                 void _toggle_mic();
-                void _toggle_video();
                 void _cycle_backend(int direction);
                 void _cycle_voice(int direction);
                 void _apply_mode();

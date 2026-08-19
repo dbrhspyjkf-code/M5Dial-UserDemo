@@ -21,9 +21,6 @@ class GUI_Reachy : public GUI_Base
         void renderAudio(const REACHY_CLIENT::AudioState& audio,
                          int edit_mode);
         void renderSystem(const std::string& status);
-        void renderVideo(const REACHY_CLIENT::VideoState& video,
-                         const REACHY_CLIENT::JpegFrame& frame,
-                         const std::string& status);
         void renderMode(const REACHY_CLIENT::ModeState& mode,
                         int edit_mode,
                         bool restart_confirm,
